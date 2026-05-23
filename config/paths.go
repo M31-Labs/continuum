@@ -17,5 +17,9 @@ func Resolve(cfg Config, configPath string) Config {
 	cfg.Policy.Bundle = ResolvePath(configPath, cfg.Policy.Bundle)
 	cfg.Audit.Path = ResolvePath(configPath, cfg.Audit.Path)
 	cfg.Capabilities.HorizonManifestDir = ResolvePath(configPath, cfg.Capabilities.HorizonManifestDir)
+	cfg.State.PolicyStore = ResolvePath(configPath, cfg.State.PolicyStore)
+	cfg.State.GrantStore = ResolvePath(configPath, cfg.State.GrantStore)
+	cfg.State.SessionStore = ResolvePath(configPath, cfg.State.SessionStore)
+	cfg.State.AirlockStore = ResolvePath(configPath, cfg.State.AirlockStore)
 	return cfg
 }

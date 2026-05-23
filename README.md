@@ -34,6 +34,7 @@ continuum run --agent claude --repo . -- claude code
 
 ```sh
 continuum policy publish examples/agent-workdir/policies/main.arb
+continuum policy check examples/agent-workdir/policies/main.arb
 continuum policy activate agent-workdir
 continuum policy list
 continuum policy show agent-workdir
@@ -63,6 +64,7 @@ V0 is observe-first. It can:
 - consume Horizon v0 capability manifests
 - register Continuum and Horizon-declared capabilities
 - resolve active policies from the policy store
+- compile and evaluate `.arb` policies with Arbiter
 - inspect published policies with `policy list` and `policy show`
 - create governed sessions for `continuum run`
 - ingest Continuum event JSON, JSON arrays, JSONL, audit JSONL, or Horizon event envelopes
@@ -77,6 +79,30 @@ V0 is observe-first. It can:
 - serve daemon health, capabilities, sessions, grants, airlocks, and audit state over HTTP
 
 V0 does not claim kernel enforcement. `observe` records decisions; `noop` is for tests and dry runs.
+
+## Config
+
+`continuum.toml` controls both policy inputs and local state paths. Relative
+paths resolve from the config file directory.
+
+```toml
+[project]
+name = "agent-workdir"
+version = "0.1.0"
+
+[policy]
+bundle = "policies/main.arb"
+
+[audit]
+kind = "jsonl"
+path = ".continuum/audit.jsonl"
+
+[state]
+policy_store = ".continuum/policies.json"
+grant_store = ".continuum/grants.json"
+session_store = ".continuum/sessions.json"
+airlock_store = ".continuum/airlock.json"
+```
 
 ## Doctrine
 

@@ -21,6 +21,21 @@ func Validate(cfg Config) error {
 	if cfg.Approval.Kind == "" {
 		return fmt.Errorf("approval.kind is required")
 	}
+	switch cfg.Approval.Kind {
+	case "cli", "server", "allow", "deny":
+	default:
+		return fmt.Errorf("approval.kind %q is not supported", cfg.Approval.Kind)
+	}
+	for name, path := range map[string]string{
+		"policy_store":  cfg.State.PolicyStore,
+		"grant_store":   cfg.State.GrantStore,
+		"session_store": cfg.State.SessionStore,
+		"airlock_store": cfg.State.AirlockStore,
+	} {
+		if path == "" {
+			return fmt.Errorf("state.%s is required", name)
+		}
+	}
 	for name, backend := range map[string]string{
 		"network": cfg.Enforcement.Network,
 		"file":    cfg.Enforcement.File,

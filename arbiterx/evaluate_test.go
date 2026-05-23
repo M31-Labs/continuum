@@ -121,7 +121,14 @@ func TestAirlockRansomwareRewrite(t *testing.T) {
 
 func evaluate(t *testing.T, facts []arbiterx.Fact) arbiterx.Decision {
 	t.Helper()
-	bundle, err := arbiterx.CompileFile(filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"))
+	policyPath := filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb")
+	for _, fact := range facts {
+		if fact.Type == arbiterx.FactBehavior {
+			policyPath = filepath.Join("..", "examples", "airlock", "policies", "main.arb")
+			break
+		}
+	}
+	bundle, err := arbiterx.CompileFile(policyPath)
 	if err != nil {
 		t.Fatalf("CompileFile: %v", err)
 	}

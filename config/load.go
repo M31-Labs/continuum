@@ -129,6 +129,19 @@ func assign(cfg *Config, section, key, value string) error {
 			return unknown(section, key)
 		}
 		cfg.Capabilities.HorizonManifestDir = value
+	case "state":
+		switch key {
+		case "policy_store":
+			cfg.State.PolicyStore = value
+		case "grant_store":
+			cfg.State.GrantStore = value
+		case "session_store":
+			cfg.State.SessionStore = value
+		case "airlock_store":
+			cfg.State.AirlockStore = value
+		default:
+			return unknown(section, key)
+		}
 	case "enforcement":
 		switch key {
 		case "network":

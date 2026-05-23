@@ -3,8 +3,13 @@ package arbiterx
 import (
 	"context"
 	"path/filepath"
-	"regexp"
+	"sort"
 	"strings"
+
+	arbiter "github.com/odvcencio/arbiter"
+	"github.com/odvcencio/arbiter/expert"
+	"github.com/odvcencio/arbiter/govern"
+	"github.com/odvcencio/arbiter/vm"
 )
 
 type Decision struct {
@@ -14,16 +19,16 @@ type Decision struct {
 	Arbitrace []Step    `json:"arbitrace,omitempty"`
 }
 
-func Evaluate(_ context.Context, bundle *Bundle, facts []Fact) (Decision, error) {
+func Evaluate(ctx context.Context, bundle *Bundle, facts []Fact) (Decision, error) {
 	decision := Decision{}
 	if bundle != nil {
 		decision.BundleID = bundle.ID
 	}
 	input := collectInput(facts)
 	if input.behavior != nil || (bundle != nil && bundle.Kind == "airlock") {
-		return evaluateAirlock(decision, input), nil
+		return evaluateAirlock(ctx, decision, bundle, input)
 	}
-	return evaluateAgentGuard(decision, input), nil
+	return evaluateAgentGuard(ctx, decision, bundle, input)
 }
 
 type normalizedInput struct {
@@ -86,61 +91,84 @@ func merge(dst map[string]any, src map[string]any) map[string]any {
 	return dst
 }
 
-func evaluateAgentGuard(decision Decision, in normalizedInput) Decision {
-	path := stringField(in.file, "path")
-	op := stringField(in.file, "op")
-	repo := stringField(in.agent, "repo_root")
-	ip := stringField(in.net, "ip")
-	cwd := stringField(in.process, "cwd")
-
-	if path != "" && hostSecretPath(path) {
-		return selectOutcome(decision, NewOutcome(OutcomeDeny, "DenyHostSecrets", map[string]any{
-			"reason": "agent cannot access host credential material",
-		}))
+func evaluateAgentGuard(_ context.Context, decision Decision, bundle *Bundle, in normalizedInput) (Decision, error) {
+	policyOutcome, trace, err := evaluateRules(bundle, in)
+	if err != nil {
+		return decision, err
 	}
-	if ip == "169.254.169.254" {
-		return selectOutcome(decision, NewOutcome(OutcomeDeny, "DenyCloudMetadata", map[string]any{
-			"reason": "cloud metadata service is blocked",
-		}))
+	decision.Arbitrace = append(decision.Arbitrace, trace...)
+	if policyOutcome != nil && policyOutcome.Name == OutcomeDeny {
+		return selectOutcome(decision, *policyOutcome), nil
 	}
 	if grantID := matchingNetworkGrant(in); grantID != "" {
 		return selectOutcome(decision, NewOutcome(OutcomeAllow, "AllowTemporaryGrant", map[string]any{
 			"reason": "temporary grant permits network connection",
 			"grant":  grantID,
-		}))
+		})), nil
 	}
 	if grantID := matchingFileGrant(in); grantID != "" {
 		return selectOutcome(decision, NewOutcome(OutcomeAllow, "AllowTemporaryGrant", map[string]any{
 			"reason": "temporary grant permits file access",
 			"grant":  grantID,
-		}))
+		})), nil
 	}
 	if grantID := matchingProcessGrant(in); grantID != "" {
 		return selectOutcome(decision, NewOutcome(OutcomeAllow, "AllowTemporaryGrant", map[string]any{
 			"reason": "temporary grant permits process execution",
 			"grant":  grantID,
-		}))
+		})), nil
 	}
-	if path != "" && op == "write" && strings.Contains(filepath.ToSlash(path), "/.github/workflows/") {
-		return selectOutcome(decision, NewOutcome(OutcomeAskHuman, "AskOnCIWrites", map[string]any{
-			"question": "Agent wants to modify CI workflow",
-			"risk":     "CI workflow changes can create persistence or exfiltration paths",
-		}))
-	}
-	if path != "" && repo != "" && pathInside(repo, path) {
-		return selectOutcome(decision, NewOutcome(OutcomeAllow, "AllowInsideRepo", map[string]any{
-			"reason": "inside declared repository root",
-		}))
-	}
-	if cwd != "" && repo != "" && pathInside(repo, cwd) {
-		return selectOutcome(decision, NewOutcome(OutcomeAllow, "AllowInsideRepo", map[string]any{
-			"reason": "inside declared repository root",
-		}))
+	if policyOutcome != nil {
+		return selectOutcome(decision, *policyOutcome), nil
 	}
 	return selectOutcome(decision, NewOutcome(OutcomeAudit, "NoMatchingRule", map[string]any{
 		"severity": "info",
 		"reason":   "no matching policy rule",
-	}))
+	})), nil
+}
+
+func evaluateRules(bundle *Bundle, in normalizedInput) (*Outcome, []Step, error) {
+	if bundle == nil || bundle.Program == nil {
+		return nil, nil, nil
+	}
+	envelope := arbiterEnvelope(in)
+	dc := arbiter.DataFromMap(envelope, bundle.Program)
+	matches, trace, err := arbiter.EvalGovernedWithOverrides(bundle.Program, dc, bundle.Program.Segments, envelope, bundle.ID, nil)
+	if err != nil {
+		return nil, stepsFromArbitrace(trace), err
+	}
+	if len(matches) == 0 {
+		return nil, stepsFromArbitrace(trace), nil
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		return matches[i].Priority < matches[j].Priority
+	})
+	outcome := outcomeFromMatch(matches[0])
+	return &outcome, stepsFromArbitrace(trace), nil
+}
+
+func arbiterEnvelope(in normalizedInput) map[string]any {
+	envelope := map[string]any{}
+	if in.agent != nil {
+		envelope["agent"] = in.agent
+	}
+	if in.file != nil {
+		envelope["file"] = in.file
+	}
+	if in.net != nil {
+		envelope["net"] = in.net
+	}
+	if in.process != nil {
+		envelope["process"] = in.process
+	}
+	if in.behavior != nil {
+		envelope["behavior"] = in.behavior
+	}
+	return envelope
+}
+
+func outcomeFromMatch(match vm.MatchedRule) Outcome {
+	return NewOutcome(match.Action, match.Name, match.Params)
 }
 
 func matchingNetworkGrant(in normalizedInput) string {
@@ -240,29 +268,68 @@ func grantID(grant map[string]any) string {
 	return id
 }
 
-func evaluateAirlock(decision Decision, in normalizedInput) Decision {
-	execCount := numberField(in.behavior, "exec_count")
-	targets := numberField(in.behavior, "unique_network_targets")
-	rewritten := numberField(in.behavior, "rewritten_files")
-	entropy := numberField(in.behavior, "entropy_increase_score")
-	subj := stringField(in.behavior, "subject")
-
-	if targets > 50 && execCount > 20 {
-		return selectOutcome(decision, NewOutcome(OutcomeEnterAirlock, "DetectWormLikeFanout", map[string]any{
-			"subject": subj,
-			"reason":  "worm-like process/network fanout",
-		}))
-	}
-	if rewritten > 100 && entropy > 0.8 {
-		return selectOutcome(decision, NewOutcome(OutcomeEnterAirlock, "DetectRansomwareLikeRewrite", map[string]any{
-			"subject": subj,
-			"reason":  "ransomware-like rewrite/encryption pattern",
-		}))
+func evaluateAirlock(ctx context.Context, decision Decision, bundle *Bundle, in normalizedInput) (Decision, error) {
+	if bundle != nil && bundle.Expert != nil {
+		result, err := expert.NewSession(bundle.Expert, arbiterEnvelope(in), nil, expert.Options{BundleID: decision.BundleID}).Run(ctx)
+		if err != nil {
+			return decision, err
+		}
+		decision.Arbitrace = append(decision.Arbitrace, stepsFromActivations(result.Activations)...)
+		if len(result.Outcomes) > 0 {
+			outcome := outcomeFromExpert(result.Outcomes[0])
+			return selectOutcome(decision, outcome), nil
+		}
 	}
 	return selectOutcome(decision, NewOutcome(OutcomeAudit, "AirlockNoMatch", map[string]any{
 		"severity": "info",
 		"reason":   "behavior did not cross airlock thresholds",
-	}))
+	})), nil
+}
+
+func outcomeFromExpert(outcome expert.Outcome) Outcome {
+	return NewOutcome(outcome.Name, outcome.Rule, outcome.Params)
+}
+
+func stepsFromActivations(activations []expert.Activation) []Step {
+	var out []Step
+	for _, activation := range activations {
+		out = append(out, stepsFromArbitrace(&govern.Arbitrace{Steps: activation.Arbitrace})...)
+		if len(activation.Arbitrace) == 0 {
+			result := "blocked"
+			if activation.Changed {
+				result = "matched"
+			}
+			out = append(out, Step{
+				Rule:    activation.Rule,
+				Result:  result,
+				Message: activation.Detail,
+			})
+		}
+	}
+	return out
+}
+
+func stepsFromArbitrace(trace *govern.Arbitrace) []Step {
+	if trace == nil || len(trace.Steps) == 0 {
+		return nil
+	}
+	out := make([]Step, 0, len(trace.Steps))
+	for _, step := range trace.Steps {
+		result := "blocked"
+		if step.Result {
+			result = "matched"
+		}
+		rule := step.Subject
+		if rule == "" {
+			rule = step.Check
+		}
+		out = append(out, Step{
+			Rule:    rule,
+			Result:  result,
+			Message: step.Detail,
+		})
+	}
+	return out
 }
 
 func selectOutcome(decision Decision, outcome Outcome) Decision {
@@ -274,12 +341,6 @@ func selectOutcome(decision Decision, outcome Outcome) Decision {
 		Message: outcome.Reason(),
 	})
 	return decision
-}
-
-var hostSecretRE = regexp.MustCompile(`(^|/)\.(ssh|aws|kube)(/|$)`)
-
-func hostSecretPath(path string) bool {
-	return hostSecretRE.MatchString(filepath.ToSlash(path))
 }
 
 func pathInside(root, path string) bool {

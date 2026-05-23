@@ -1,6 +1,6 @@
 .continuum/
-continuum
-continuum-agent
+/continuum
+/continuum-agent
 coverage.out
 *.test
 *.prof

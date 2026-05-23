@@ -6,6 +6,7 @@ type Config struct {
 	Audit        AuditConfig        `json:"audit"`
 	Subject      SubjectConfig      `json:"subject"`
 	Capabilities CapabilitiesConfig `json:"capabilities"`
+	State        StateConfig        `json:"state"`
 	Enforcement  EnforcementConfig  `json:"enforcement"`
 	Approval     ApprovalConfig     `json:"approval"`
 }
@@ -33,6 +34,13 @@ type CapabilitiesConfig struct {
 	HorizonManifestDir string `json:"horizon_manifest_dir"`
 }
 
+type StateConfig struct {
+	PolicyStore  string `json:"policy_store"`
+	GrantStore   string `json:"grant_store"`
+	SessionStore string `json:"session_store"`
+	AirlockStore string `json:"airlock_store"`
+}
+
 type EnforcementConfig struct {
 	Network string `json:"network"`
 	File    string `json:"file"`
@@ -51,6 +59,12 @@ func Default() Config {
 		Subject: SubjectConfig{DefaultKind: "agent", DefaultMode: "ask"},
 		Capabilities: CapabilitiesConfig{
 			HorizonManifestDir: ".continuum/capabilities",
+		},
+		State: StateConfig{
+			PolicyStore:  ".continuum/policies.json",
+			GrantStore:   ".continuum/grants.json",
+			SessionStore: ".continuum/sessions.json",
+			AirlockStore: ".continuum/airlock.json",
 		},
 		Enforcement: EnforcementConfig{
 			Network: "observe",

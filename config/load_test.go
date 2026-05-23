@@ -20,6 +20,9 @@ func TestLoadExampleConfig(t *testing.T) {
 	if cfg.Enforcement.Network != "observe" {
 		t.Fatalf("network backend = %q", cfg.Enforcement.Network)
 	}
+	if cfg.State.PolicyStore != ".continuum/policies.json" {
+		t.Fatalf("policy store = %q", cfg.State.PolicyStore)
+	}
 }
 
 func TestLoadRejectsUnknownKey(t *testing.T) {
@@ -40,6 +43,13 @@ func TestLoadReportsFile(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsUnsupportedApprovalKind(t *testing.T) {
+	_, err := LoadBytes([]byte("[approval]\nkind = \"webhook\"\n"))
+	if err == nil {
+		t.Fatal("expected unsupported approval kind error")
+	}
+}
+
 func TestResolvePathsRelativeToConfig(t *testing.T) {
 	cfg := Default()
 	resolved := Resolve(cfg, filepath.Join("examples", "agent-workdir", "continuum.toml"))
@@ -48,5 +58,8 @@ func TestResolvePathsRelativeToConfig(t *testing.T) {
 	}
 	if resolved.Audit.Path != filepath.Join("examples", "agent-workdir", ".continuum", "audit.jsonl") {
 		t.Fatalf("audit path = %q", resolved.Audit.Path)
+	}
+	if resolved.State.GrantStore != filepath.Join("examples", "agent-workdir", ".continuum", "grants.json") {
+		t.Fatalf("grant store = %q", resolved.State.GrantStore)
 	}
 }

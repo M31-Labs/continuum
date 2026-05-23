@@ -21,6 +21,7 @@ input {
         pid: number
         comm: string
         argv_text: string
+        cwd: string
     }
 }
 
@@ -39,10 +40,11 @@ outcome AskHuman {
 
 segment inside_repo {
     file.path starts_with agent.repo_root
+    or process.cwd starts_with agent.repo_root
 }
 
 segment host_secret {
-    file.path matches ".*/\\.(ssh|aws|kube)/.*"
+    file.path matches ".*/[.](ssh|aws|kube)/.*"
 }
 
 rule DenyHostSecrets priority 1 {
@@ -56,7 +58,7 @@ rule DenyHostSecrets priority 1 {
 
 rule AskOnCIWrites priority 5 {
     when {
-        file.path matches ".*/\\.github/workflows/.*"
+        file.path matches ".*/[.]github/workflows/.*"
         and file.op == "write"
     }
     then AskHuman {
