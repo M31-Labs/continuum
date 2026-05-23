@@ -63,17 +63,27 @@ func (e *Engine) DecideFacts(ctx context.Context, evt event.Event, facts []arbit
 		return audit.Event{}, decision, err
 	}
 	record := e.auditEvent(evt, decision)
+	var deliveryErr error
 	if decision.Selected != nil {
-		if err := e.apply(ctx, evt, *decision.Selected); err != nil {
-			return record, decision, err
+		attempt := audit.DeliveryAttempt{
+			Time:        e.now(),
+			Capability:  record.Capability,
+			Enforcement: e.enforcementName(),
+			Status:      "delivered",
 		}
+		if err := e.apply(ctx, evt, *decision.Selected); err != nil {
+			attempt.Status = "failed"
+			attempt.Error = err.Error()
+			deliveryErr = err
+		}
+		record.Delivery = append(record.Delivery, attempt)
 	}
 	if e.Audit != nil {
 		if err := e.Audit.Write(ctx, record); err != nil {
 			return record, decision, err
 		}
 	}
-	return record, decision, nil
+	return record, decision, deliveryErr
 }
 
 func (e *Engine) auditEvent(evt event.Event, decision arbiterx.Decision) audit.Event {

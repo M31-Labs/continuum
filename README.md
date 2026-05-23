@@ -43,6 +43,7 @@ continuum ingest --events testdata/events/file_secret_access.json --approval den
 continuum sessions list
 continuum sessions show agent-session-42
 continuum agent start --config continuum.toml --listen 127.0.0.1:8787
+curl -X POST --data-binary @events.jsonl http://127.0.0.1:8787/ingest
 continuum capabilities
 continuum grant --session agent-session-42 --capability network.connect --host github.com --port 443 --ttl 20m --reason "fetch dependency"
 continuum grant --session agent-session-42 --capability file.write --path .github/workflows/test.yml --op write --ttl 20m --reason "approve CI edit"
@@ -54,6 +55,7 @@ continuum airlock status
 continuum airlock enter --pid 1234 --reason "wormlike fanout"
 continuum airlock accumulate --events audit.jsonl
 continuum airlock release --session airlock-123
+examples/demo-v0.sh
 ```
 
 ## V0 Surface
@@ -76,7 +78,8 @@ V0 is observe-first. It can:
 - create, list, revoke, prune, and evaluate temporary network/file/process grants
 - persist airlock and session state
 - accumulate event history into airlock behavior summaries
-- serve daemon health, capabilities, sessions, grants, airlocks, and audit state over HTTP
+- serve daemon health, capabilities, sessions, grants, airlocks, audit state,
+  and governed event ingestion over HTTP
 
 V0 does not claim kernel enforcement. `observe` records decisions; `noop` is for tests and dry runs.
 
@@ -156,6 +159,11 @@ event type:
 ```sh
 continuum ingest --manifest-dir .continuum/capabilities --events horizon-events.jsonl
 ```
+
+The local daemon exposes the same path as `POST /ingest` once started with
+`--listen`. The endpoint accepts Continuum event JSON, JSON arrays, JSONL,
+audit JSONL, or Horizon envelopes and returns the audit decisions written for
+the batch.
 
 ## Status
 

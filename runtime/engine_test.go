@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -9,7 +10,9 @@ import (
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
+	"m31labs.dev/continuum/enforcement"
 	"m31labs.dev/continuum/event"
+	"m31labs.dev/continuum/internal/testutil"
 	"m31labs.dev/continuum/subject"
 )
 
@@ -40,6 +43,65 @@ func TestEngineDecideEventWritesAudit(t *testing.T) {
 	if len(sink.events) != 1 {
 		t.Fatalf("audit writes = %d", len(sink.events))
 	}
+	if len(sink.events[0].Delivery) != 1 || sink.events[0].Delivery[0].Status != "delivered" {
+		t.Fatalf("delivery = %+v", sink.events[0].Delivery)
+	}
+}
+
+func TestEnginePersistsFailedDeliveryAttempt(t *testing.T) {
+	bundle, err := arbiterx.CompileFile(filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"))
+	if err != nil {
+		t.Fatalf("CompileFile: %v", err)
+	}
+	sink := &memorySink{}
+	engine := NewEngine(bundle, sink)
+	engine.File = failingFileBackend{}
+	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
+	_, _, err = engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/home/draco/.ssh/id_ed25519", "read"))
+	if err == nil {
+		t.Fatal("expected delivery error")
+	}
+	if len(sink.events) != 1 {
+		t.Fatalf("audit writes = %d", len(sink.events))
+	}
+	delivery := sink.events[0].Delivery
+	if len(delivery) != 1 || delivery[0].Status != "failed" || delivery[0].Error == "" {
+		t.Fatalf("delivery = %+v", delivery)
+	}
+}
+
+func TestOutcomeAuditRoutingGolden(t *testing.T) {
+	bundle, err := arbiterx.CompileFile(filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"))
+	if err != nil {
+		t.Fatalf("CompileFile: %v", err)
+	}
+	engine := NewEngine(bundle, audit.NopSink{})
+	engine.Now = func() time.Time { return time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC) }
+	evt := testutil.ReadJSON[event.Event](t, filepath.Join("..", "testdata", "events", "file_secret_access.json"))
+	record, _, err := engine.DecideEvent(context.Background(), evt)
+	if err != nil {
+		t.Fatalf("DecideEvent: %v", err)
+	}
+	projection := struct {
+		Decision       string `json:"decision"`
+		Outcome        string `json:"outcome"`
+		Rule           string `json:"rule"`
+		Reason         string `json:"reason"`
+		Capability     string `json:"capability"`
+		Enforcement    string `json:"enforcement"`
+		DeliveryStatus string `json:"delivery_status"`
+	}{
+		Decision:    record.Decision,
+		Outcome:     record.Outcome.Name,
+		Rule:        record.Outcome.Rule,
+		Reason:      record.Reason,
+		Capability:  record.Capability,
+		Enforcement: record.Enforcement,
+	}
+	if len(record.Delivery) > 0 {
+		projection.DeliveryStatus = record.Delivery[0].Status
+	}
+	testutil.EqualGoldenJSON(t, filepath.Join("..", "testdata", "golden", "file_secret_access_audit_route.json"), projection)
 }
 
 func TestEngineAddsActiveGrantFacts(t *testing.T) {
@@ -92,4 +154,12 @@ type memorySink struct {
 func (s *memorySink) Write(_ context.Context, evt audit.Event) error {
 	s.events = append(s.events, evt)
 	return nil
+}
+
+type failingFileBackend struct {
+	enforcement.ObserveBackend
+}
+
+func (failingFileBackend) DenyPath(context.Context, enforcement.FileDeny) error {
+	return fmt.Errorf("deny path failed")
 }

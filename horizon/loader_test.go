@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"m31labs.dev/continuum/capability"
+	"m31labs.dev/continuum/internal/testutil"
 )
 
 func TestLoadHorizonManifests(t *testing.T) {
@@ -69,4 +70,12 @@ func TestLoadHorizonV0Dir(t *testing.T) {
 	if len(caps) != 1 || caps[0].Name != "kernel.process.exec.observe" {
 		t.Fatalf("caps = %+v", caps)
 	}
+}
+
+func TestHorizonManifestToRegistryCapabilityGolden(t *testing.T) {
+	caps, err := LoadDir(filepath.Join("..", "testdata", "horizon-manifests"))
+	if err != nil {
+		t.Fatalf("LoadDir: %v", err)
+	}
+	testutil.EqualGoldenJSON(t, filepath.Join("..", "testdata", "golden", "horizon_exec_capabilities.json"), caps)
 }

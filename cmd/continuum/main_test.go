@@ -511,6 +511,52 @@ func TestIngestCommandEvaluatesAndAuditsFixture(t *testing.T) {
 	}
 }
 
+func TestIngestCommandAccumulatesAirlockBehavior(t *testing.T) {
+	dir := t.TempDir()
+	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
+	var events []event.Event
+	for i := 0; i < 21; i++ {
+		events = append(events, event.NewProcessExec(subj, map[string]any{
+			"comm":      "sh",
+			"argv_text": "sh -c true",
+			"cwd":       "/repo",
+		}))
+	}
+	for i := 0; i < 51; i++ {
+		events = append(events, event.NewNetworkConnect(subj, "host-"+strconv.Itoa(i)+".example", "10.0.0."+strconv.Itoa(i), 443))
+	}
+	data, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventsPath := filepath.Join(dir, "events.json")
+	if err := os.WriteFile(eventsPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	airlockStore := filepath.Join(dir, "airlock.json")
+	var out, errOut bytes.Buffer
+	if err := run([]string{
+		"ingest",
+		"--policy", "../../examples/agent-workdir/policies/main.arb",
+		"--airlock-policy", "../../examples/airlock/policies/main.arb",
+		"--events", eventsPath,
+		"--audit", filepath.Join(dir, "audit.jsonl"),
+		"--airlock-store", airlockStore,
+	}, &out, &errOut); err != nil {
+		t.Fatalf("ingest: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "ENTER_AIRLOCK") || !strings.Contains(out.String(), "worm-like process/network fanout") {
+		t.Fatalf("ingest output = %q", out.String())
+	}
+	var statusOut bytes.Buffer
+	if err := run([]string{"airlock", "status", "--store", airlockStore}, &statusOut, &errOut); err != nil {
+		t.Fatalf("airlock status: %v", err)
+	}
+	if !strings.Contains(statusOut.String(), "airlocked") {
+		t.Fatalf("airlock status output = %q", statusOut.String())
+	}
+}
+
 func TestIngestCommandAcceptsHorizonEnvelope(t *testing.T) {
 	dir := t.TempDir()
 	eventPath := filepath.Join(dir, "horizon.json")

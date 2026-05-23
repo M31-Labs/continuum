@@ -39,10 +39,12 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 		if *listen != "" {
 			fmt.Fprintf(stdout, "continuum-agent: listening %s\n", *listen)
 			return http.ListenAndServe(*listen, cruntime.NewHTTPHandlerWithState(daemon, cruntime.StatePaths{
-				Sessions: cfg.State.SessionStore,
-				Grants:   cfg.State.GrantStore,
-				Airlock:  cfg.State.AirlockStore,
-				Audit:    cfg.Audit.Path,
+				PolicyStore:  cfg.State.PolicyStore,
+				PolicyBundle: cfg.Policy.Bundle,
+				Sessions:     cfg.State.SessionStore,
+				Grants:       cfg.State.GrantStore,
+				Airlock:      cfg.State.AirlockStore,
+				Audit:        cfg.Audit.Path,
 			}))
 		}
 		return nil

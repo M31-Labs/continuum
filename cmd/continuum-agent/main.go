@@ -33,10 +33,12 @@ func main() {
 	if *listen != "" {
 		fmt.Printf("continuum-agent: listening %s\n", *listen)
 		handler := cruntime.NewHTTPHandlerWithState(daemon, cruntime.StatePaths{
-			Sessions: cfg.State.SessionStore,
-			Grants:   cfg.State.GrantStore,
-			Airlock:  cfg.State.AirlockStore,
-			Audit:    cfg.Audit.Path,
+			PolicyStore:  cfg.State.PolicyStore,
+			PolicyBundle: cfg.Policy.Bundle,
+			Sessions:     cfg.State.SessionStore,
+			Grants:       cfg.State.GrantStore,
+			Airlock:      cfg.State.AirlockStore,
+			Audit:        cfg.Audit.Path,
 		})
 		if err := http.ListenAndServe(*listen, handler); err != nil {
 			fmt.Fprintln(os.Stderr, "continuum-agent:", err)

@@ -26,3 +26,44 @@ func TestValidateRejectsBroadShape(t *testing.T) {
 		t.Fatal("expected invalid kind error")
 	}
 }
+
+func TestValidateRejectsKindShapeMismatches(t *testing.T) {
+	cases := []Capability{
+		{Name: "source.no-output", Kind: KindSource, Danger: DangerObserve},
+		{Name: "sink.no-input", Kind: KindSink, Danger: DangerObserve},
+		{Name: "worker.no-input", Kind: KindWorker, Danger: DangerObserve},
+	}
+	for _, cap := range cases {
+		if err := Validate(cap); err == nil {
+			t.Fatalf("Validate(%s) succeeded, expected shape error", cap.Name)
+		}
+	}
+}
+
+func TestValidateRejectsInvalidBackendDanger(t *testing.T) {
+	err := Validate(Capability{Name: "approval.bad", Kind: KindSink, Owner: "continuum", Input: "AskHuman", Danger: DangerEnforcement, Backend: "cli"})
+	if err == nil {
+		t.Fatal("expected cli danger validation error")
+	}
+}
+
+func TestValidateRequiresOwnerAndRequirementForDangerousCaps(t *testing.T) {
+	err := Validate(Capability{Name: "process.kill", Kind: KindWorker, Input: "KillProcess", Danger: DangerDestructive, Backend: "observe"})
+	if err == nil {
+		t.Fatal("expected destructive owner/requirement validation error")
+	}
+	err = Validate(Capability{
+		Name:    "process.kill",
+		Kind:    KindWorker,
+		Owner:   "continuum",
+		Input:   "KillProcess",
+		Danger:  DangerDestructive,
+		Backend: "observe",
+		Requires: []Requirement{{
+			Name: "explicit-enable",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Validate destructive cap with requirement: %v", err)
+	}
+}

@@ -15,23 +15,23 @@ grants, sessions, and containment state.
   - airlock store
   - audit sink
 - [x] Expose daemon state endpoints using the same configured state paths.
-- [ ] Add an HTTP ingest endpoint for Continuum events and Horizon envelopes.
+- [x] Add an HTTP ingest endpoint for Continuum events and Horizon envelopes.
 - [x] Add `policy check` for fast policy compilation/shape validation.
-- [ ] Add airlock behavior accumulation to the normal ingest path, not only the
+- [x] Add airlock behavior accumulation to the normal ingest path, not only the
       explicit `airlock accumulate` command.
-- [ ] Persist decision delivery attempts so failed sink/worker routing is
+- [x] Persist decision delivery attempts so failed sink/worker routing is
       visible and replayable.
-- [ ] Add capability manifest validation beyond required fields:
+- [x] Add capability manifest validation beyond required fields:
   - declared kind matches input/output shape
   - danger level is valid for backend
   - privileged/destructive capabilities require explicit owner and requirement
 - [x] Add config validation for unsupported approval kinds.
 - [x] Add config validation for empty state paths.
-- [ ] Add golden tests for:
+- [x] Add golden tests for:
   - event -> fact normalization
   - outcome -> routed capability/audit event
   - Horizon manifest -> registry capability
-- [ ] Add a demo script for the first target:
+- [x] Add a demo script for the first target:
   - denied host credential read
   - allowed repo command
   - approval grant for CI workflow write

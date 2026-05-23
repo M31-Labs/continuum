@@ -3,6 +3,7 @@ package runtime
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,10 +15,13 @@ import (
 )
 
 type StatePaths struct {
-	Sessions string
-	Grants   string
-	Airlock  string
-	Audit    string
+	PolicyStore   string
+	PolicyBundle  string
+	Sessions      string
+	Grants        string
+	Airlock       string
+	AirlockPolicy string
+	Audit         string
 }
 
 func NewHTTPHandler(daemon *Daemon) http.Handler {
@@ -98,10 +102,54 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 		}
 		writeJSON(w, events)
 	})
+	mux.HandleFunc("/ingest", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if daemon == nil || daemon.Registry == nil {
+			writeError(w, http.StatusServiceUnavailable, "daemon not initialized")
+			return
+		}
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 32<<20))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		events, err := DecodeEvents(body, daemon.Registry)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		result, err := IngestEvents(r.Context(), events, IngestOptions{
+			PolicyPath:    queryPathAny(r, []string{"policy", "policy_path"}, paths.PolicyBundle),
+			PolicyStore:   queryPathAny(r, []string{"policy-store", "policy_store"}, paths.PolicyStore),
+			GrantStore:    queryPathAny(r, []string{"grants", "grant-store", "grant_store"}, paths.Grants),
+			AuditPath:     queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
+			Registry:      daemon.Registry,
+			EnableAirlock: !truthy(r.URL.Query().Get("no_airlock")),
+			Airlock: AirlockOptions{
+				PolicyPath: queryPathAny(r, []string{"airlock-policy", "airlock_policy"}, paths.AirlockPolicy),
+				StorePath:  queryPathAny(r, []string{"airlock-store", "airlock_store"}, paths.Airlock),
+				AuditPath:  queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
+			},
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, result)
+	})
 	return mux
 }
 
 func (p StatePaths) withDefaults() StatePaths {
+	if p.PolicyStore == "" {
+		p.PolicyStore = ".continuum/policies.json"
+	}
+	if p.PolicyBundle == "" {
+		p.PolicyBundle = DefaultPolicyPath
+	}
 	if p.Sessions == "" {
 		p.Sessions = ".continuum/sessions.json"
 	}
@@ -110,6 +158,9 @@ func (p StatePaths) withDefaults() StatePaths {
 	}
 	if p.Airlock == "" {
 		p.Airlock = ".continuum/airlock.json"
+	}
+	if p.AirlockPolicy == "" {
+		p.AirlockPolicy = DefaultAirlockPolicyPath
 	}
 	if p.Audit == "" {
 		p.Audit = ".continuum/audit.jsonl"
@@ -128,6 +179,15 @@ func requireGET(w http.ResponseWriter, r *http.Request) bool {
 func queryPath(r *http.Request, key, fallback string) string {
 	if value := r.URL.Query().Get(key); value != "" {
 		return value
+	}
+	return fallback
+}
+
+func queryPathAny(r *http.Request, keys []string, fallback string) string {
+	for _, key := range keys {
+		if value := r.URL.Query().Get(key); value != "" {
+			return value
+		}
 	}
 	return fallback
 }

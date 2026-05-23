@@ -65,7 +65,18 @@ func Validate(cap Capability) error {
 		return fmt.Errorf("capability name is required")
 	}
 	switch cap.Kind {
-	case KindSource, KindSink, KindWorker:
+	case KindSource:
+		if strings.TrimSpace(cap.Output) == "" {
+			return fmt.Errorf("capability %s: source output is required", cap.Name)
+		}
+	case KindSink:
+		if strings.TrimSpace(cap.Input) == "" {
+			return fmt.Errorf("capability %s: sink input is required", cap.Name)
+		}
+	case KindWorker:
+		if strings.TrimSpace(cap.Input) == "" {
+			return fmt.Errorf("capability %s: worker input is required", cap.Name)
+		}
 	default:
 		return fmt.Errorf("capability %s: invalid kind %q", cap.Name, cap.Kind)
 	}
@@ -73,6 +84,33 @@ func Validate(cap Capability) error {
 	case DangerObserve, DangerSoftControl, DangerEnforcement, DangerDestructive, DangerPrivileged:
 	default:
 		return fmt.Errorf("capability %s: invalid danger %q", cap.Name, cap.Danger)
+	}
+	if err := validateBackendDanger(cap); err != nil {
+		return err
+	}
+	if cap.Danger == DangerDestructive || cap.Danger == DangerPrivileged {
+		if strings.TrimSpace(cap.Owner) == "" {
+			return fmt.Errorf("capability %s: %s capability requires an explicit owner", cap.Name, cap.Danger)
+		}
+		if len(cap.Requires) == 0 {
+			return fmt.Errorf("capability %s: %s capability requires an explicit requirement", cap.Name, cap.Danger)
+		}
+	}
+	return nil
+}
+
+func validateBackendDanger(cap Capability) error {
+	switch cap.Backend {
+	case "", "observe", "file", "network", "process":
+		return nil
+	case "noop":
+		if cap.Danger != DangerObserve {
+			return fmt.Errorf("capability %s: noop backend only supports observe danger", cap.Name)
+		}
+	case "cli":
+		if cap.Danger != DangerObserve && cap.Danger != DangerSoftControl {
+			return fmt.Errorf("capability %s: cli backend cannot host %s danger", cap.Name, cap.Danger)
+		}
 	}
 	return nil
 }

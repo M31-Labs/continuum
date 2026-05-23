@@ -26,6 +26,9 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	grantPath := fs.String("grants", ".continuum/grants.json", "grant store")
 	approvalFlag := fs.String("approval", "deny", "approval mode: deny, allow, cli")
 	manifestDir := fs.String("manifest-dir", "", "Horizon capability manifest directory for Horizon event envelopes")
+	airlockPolicyPath := fs.String("airlock-policy", cruntime.DefaultAirlockPolicyPath, "airlock policy path")
+	airlockStorePath := fs.String("airlock-store", defaultAirlockStorePath, "airlock state store")
+	noAirlock := fs.Bool("no-airlock", false, "skip airlock behavior accumulation")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -38,6 +41,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	}
 	*policyStorePath = resolvePolicyStorePath(*policyStorePath, cfg)
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
+	*airlockStorePath = resolveAirlockStorePath(*airlockStorePath, cfg)
 	resolvedPolicy, err := resolvePolicyPath(*policyPath, *policyStorePath, cfg)
 	if err != nil {
 		return err
@@ -73,6 +77,25 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 		printAuditLine(stdout, record)
 		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, record, evt, *grantPath); err != nil {
 			return err
+		}
+	}
+	if err := sink.Close(); err != nil {
+		return err
+	}
+	if !*noAirlock {
+		airlocks, err := cruntime.EvaluateAirlockForEvents(context.Background(), events, cruntime.AirlockOptions{
+			PolicyPath: *airlockPolicyPath,
+			StorePath:  *airlockStorePath,
+			AuditPath:  *auditPath,
+		})
+		if err != nil {
+			return err
+		}
+		for _, result := range airlocks {
+			if result.Session == nil {
+				continue
+			}
+			fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s reason=%q state=%s audit=%s\n", result.Behavior.Subject, result.Session.Reason, result.Session.State, result.Record.ID)
 		}
 	}
 	fmt.Fprintf(stdout, "ingested=%d audit=%s policy=%s\n", len(events), *auditPath, resolvedPolicy)

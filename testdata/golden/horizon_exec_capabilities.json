@@ -1,0 +1,21 @@
+[
+  {
+    "name": "kernel.process.exec.observe",
+    "kind": "source",
+    "owner": "horizon",
+    "output": "ExecEvent",
+    "program": "OnExec",
+    "section": "tracepoint/sched:sched_process_exec",
+    "danger": "observe",
+    "metadata": {
+      "horizon.maps.events": [
+        "ExecEvents"
+      ],
+      "horizon.maps.read": [],
+      "horizon.maps.write": [],
+      "horizon.package": "probes",
+      "horizon.program.attach": "sched:sched_process_exec",
+      "horizon.schema": "m31labs.dev/horizon/capability/v0"
+    }
+  }
+]

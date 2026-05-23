@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"m31labs.dev/continuum/arbiterx"
+	"m31labs.dev/continuum/internal/testutil"
 	"m31labs.dev/continuum/subject"
 )
 
@@ -30,4 +31,9 @@ func TestNormalizeNetworkConnect(t *testing.T) {
 	if got := facts[1].Fields["port"]; got != 443 {
 		t.Fatalf("port = %v", got)
 	}
+}
+
+func TestNormalizeFileSecretGolden(t *testing.T) {
+	evt := testutil.ReadJSON[Event](t, "../testdata/events/file_secret_access.json")
+	testutil.EqualGoldenJSON(t, "../testdata/golden/file_secret_access_facts.json", Normalize(evt))
 }

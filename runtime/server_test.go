@@ -2,9 +2,11 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/event"
+	"m31labs.dev/continuum/horizon"
 	"m31labs.dev/continuum/subject"
 )
 
@@ -33,6 +36,128 @@ func TestHTTPHandlerServesHealthAndCapabilities(t *testing.T) {
 		if !strings.Contains(res.Header().Get("content-type"), "application/json") {
 			t.Fatalf("%s content-type = %s", path, res.Header().Get("content-type"))
 		}
+	}
+}
+
+func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
+	dir := t.TempDir()
+	auditPath := filepath.Join(dir, "audit.jsonl")
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithState(daemon, StatePaths{
+		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+		Audit:         auditPath,
+		Airlock:       filepath.Join(dir, "airlock.json"),
+	})
+	body := `{
+  "id": "evt_secret",
+  "kind": "file.open",
+  "subject": {
+    "kind": "agent",
+    "session": "agent-42",
+    "agent_name": "claude",
+    "repo_root": "/repo"
+  },
+  "fields": {
+    "path": "/home/draco/.ssh/id_ed25519",
+    "op": "read"
+  }
+}`
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader(body)))
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), `"ingested": 1`) || !strings.Contains(res.Body.String(), `"decision": "deny"`) {
+		t.Fatalf("response = %s", res.Body.String())
+	}
+	events, err := audit.ReadJSONL(auditPath)
+	if err != nil {
+		t.Fatalf("ReadJSONL: %v", err)
+	}
+	if len(events) != 1 || events[0].Decision != "deny" || len(events[0].Delivery) != 1 {
+		t.Fatalf("audit events = %+v", events)
+	}
+}
+
+func TestHTTPHandlerIngestsHorizonEnvelope(t *testing.T) {
+	dir := t.TempDir()
+	daemon := NewDaemon(horizon.DirProvider{Dir: filepath.Join("..", "testdata", "horizon-manifests")})
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithState(daemon, StatePaths{
+		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+		Audit:         filepath.Join(dir, "audit.jsonl"),
+		Airlock:       filepath.Join(dir, "airlock.json"),
+	})
+	body := `{
+  "id": "hzn_exec",
+  "capability": "kernel.process.exec.observe",
+  "subject": {
+    "kind": "agent",
+    "session": "agent-42",
+    "agent_name": "claude",
+    "repo_root": "/repo"
+  },
+  "fields": {
+    "comm": "go",
+    "argv_text": "go test ./...",
+    "cwd": "/repo"
+  }
+}`
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader(body)))
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), `"decision": "allow"`) || !strings.Contains(res.Body.String(), `kernel.process.exec.observe`) {
+		t.Fatalf("response = %s", res.Body.String())
+	}
+}
+
+func TestHTTPHandlerIngestTriggersAirlock(t *testing.T) {
+	dir := t.TempDir()
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithState(daemon, StatePaths{
+		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+		Audit:         filepath.Join(dir, "audit.jsonl"),
+		Airlock:       filepath.Join(dir, "airlock.json"),
+	})
+	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
+	var events []event.Event
+	for i := 0; i < 21; i++ {
+		events = append(events, event.NewProcessExec(subj, map[string]any{"comm": "sh", "argv_text": "sh -c true", "cwd": "/repo"}))
+	}
+	for i := 0; i < 51; i++ {
+		events = append(events, event.NewNetworkConnect(subj, "host-"+strconv.Itoa(i)+".example", "10.0.0."+strconv.Itoa(i), 443))
+	}
+	body, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader(string(body))))
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), `"airlocks"`) || !strings.Contains(res.Body.String(), `"state": "airlocked"`) {
+		t.Fatalf("response = %s", res.Body.String())
+	}
+	store, err := airlock.LoadStore(filepath.Join(dir, "airlock.json"))
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if len(store.List()) != 1 {
+		t.Fatalf("airlocks = %+v", store.List())
 	}
 }
 
