@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	defaultPolicyStorePath  = ".continuum/policies.json"
-	defaultGrantStorePath   = ".continuum/grants.json"
-	defaultSessionStorePath = ".continuum/sessions.json"
-	defaultAirlockStorePath = ".continuum/airlock.json"
-	defaultAuditPath        = ".continuum/audit.jsonl"
+	defaultPolicyStorePath   = ".continuum/policies.json"
+	defaultGrantStorePath    = ".continuum/grants.json"
+	defaultDeliveryStorePath = ".continuum/deliveries.json"
+	defaultSessionStorePath  = ".continuum/sessions.json"
+	defaultAirlockStorePath  = ".continuum/airlock.json"
+	defaultAuditPath         = ".continuum/audit.jsonl"
 )
 
 type cliConfig struct {
@@ -89,6 +90,16 @@ func resolveGrantStorePath(path string, cfg cliConfig) string {
 	}
 	if cfg.ConfigPath != "<default>" && cfg.Config.State.GrantStore != "" {
 		return cfg.Config.State.GrantStore
+	}
+	return path
+}
+
+func resolveDeliveryStorePath(path string, cfg cliConfig) string {
+	if path != "" && path != defaultDeliveryStorePath {
+		return path
+	}
+	if cfg.ConfigPath != "<default>" && cfg.Config.State.DeliveryStore != "" {
+		return cfg.Config.State.DeliveryStore
 	}
 	return path
 }

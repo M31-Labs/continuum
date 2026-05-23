@@ -26,3 +26,16 @@ type FileBackend interface {
 	Backend
 	DenyPath(context.Context, FileDeny) error
 }
+
+type CgroupBackend interface {
+	Backend
+	Attach(context.Context, CgroupAttach) error
+	Freeze(context.Context, CgroupFreeze) error
+	Thaw(context.Context, CgroupThaw) error
+}
+
+type NetworkNamespaceBackend interface {
+	Backend
+	Isolate(context.Context, NamespaceIsolation) error
+	ReleaseIsolation(context.Context, NamespaceRelease) error
+}

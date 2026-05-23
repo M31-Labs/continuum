@@ -29,6 +29,7 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	policyStorePath := fs.String("policy-store", ".continuum/policies.json", "policy store")
 	auditPath := fs.String("audit", ".continuum/audit.jsonl", "audit JSONL path")
 	grantPath := fs.String("grants", ".continuum/grants.json", "grant store")
+	deliveryPath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	sessionPath := fs.String("sessions", ".continuum/sessions.json", "session store")
 	approvalFlag := fs.String("approval", "deny", "approval mode: deny, allow, cli")
 	if err := fs.Parse(args); err != nil {
@@ -50,6 +51,7 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	}
 	*policyStorePath = resolvePolicyStorePath(*policyStorePath, cfg)
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
+	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	*sessionPath = resolveSessionStorePath(*sessionPath, cfg)
 	absRepo, err := filepath.Abs(*repo)
 	if err != nil {
@@ -71,6 +73,11 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	}
 	defer sink.Close()
 	engine := cruntime.NewEngine(bundle, sink)
+	queue, err := cruntime.LoadDeliveryStore(*deliveryPath)
+	if err != nil {
+		return err
+	}
+	engine.Queue = queue
 	if grants, err := capability.LoadGrantStore(*grantPath); err == nil {
 		engine.Grants = grants.Active(time.Now().UTC())
 	} else if !os.IsNotExist(err) {
@@ -92,6 +99,9 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("start %s: %w", strings.Join(rest, " "), err)
 	}
 	subj := subject.NewAgent(*agent, session, absRepo, strings.Join(rest, " "), cmd.Process.Pid)
+	if cgroup, err := subject.CgroupForPID(cmd.Process.Pid); err == nil {
+		subj.Cgroup = cgroup
+	}
 	sessions, err := cruntime.LoadSessionStore(*sessionPath)
 	if err != nil {
 		_ = cmd.Process.Kill()

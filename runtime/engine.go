@@ -21,6 +21,7 @@ type Engine struct {
 	Process     enforcement.ProcessBackend
 	File        enforcement.FileBackend
 	Grants      []capability.Grant
+	Queue       *DeliveryStore
 	Enforcement string
 	Now         func() time.Time
 	NewID       func() string
@@ -65,6 +66,10 @@ func (e *Engine) DecideFacts(ctx context.Context, evt event.Event, facts []arbit
 	record := e.auditEvent(evt, decision)
 	var deliveryErr error
 	if decision.Selected != nil {
+		queueItem, err := e.enqueueDelivery(record, evt, *decision.Selected)
+		if err != nil {
+			return record, decision, err
+		}
 		attempt := audit.DeliveryAttempt{
 			Time:        e.now(),
 			Capability:  record.Capability,
@@ -77,6 +82,11 @@ func (e *Engine) DecideFacts(ctx context.Context, evt event.Event, facts []arbit
 			deliveryErr = err
 		}
 		record.Delivery = append(record.Delivery, attempt)
+		if queueItem.ID != "" {
+			if err := e.recordDeliveryAttempt(queueItem.ID, attempt); err != nil {
+				return record, decision, err
+			}
+		}
 	}
 	if e.Audit != nil {
 		if err := e.Audit.Write(ctx, record); err != nil {
@@ -84,6 +94,39 @@ func (e *Engine) DecideFacts(ctx context.Context, evt event.Event, facts []arbit
 		}
 	}
 	return record, decision, deliveryErr
+}
+
+func (e *Engine) enqueueDelivery(record audit.Event, evt event.Event, outcome arbiterx.Outcome) (DeliveryItem, error) {
+	if e == nil || e.Queue == nil {
+		return DeliveryItem{}, nil
+	}
+	item, err := e.Queue.Enqueue(DeliveryItem{
+		AuditID:     record.ID,
+		EventID:     evt.ID,
+		Capability:  record.Capability,
+		Enforcement: e.enforcementName(),
+		Delivery:    DeliveryFor(evt, outcome),
+		Status:      DeliveryPending,
+		CreatedAt:   e.now(),
+		UpdatedAt:   e.now(),
+	})
+	if err != nil {
+		return DeliveryItem{}, err
+	}
+	if err := e.Queue.Save(); err != nil {
+		return DeliveryItem{}, err
+	}
+	return item, nil
+}
+
+func (e *Engine) recordDeliveryAttempt(id string, attempt audit.DeliveryAttempt) error {
+	if e == nil || e.Queue == nil {
+		return nil
+	}
+	if _, err := e.Queue.RecordAttempt(id, attempt); err != nil {
+		return err
+	}
+	return e.Queue.Save()
 }
 
 func (e *Engine) auditEvent(evt event.Event, decision arbiterx.Decision) audit.Event {

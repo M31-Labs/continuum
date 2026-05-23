@@ -35,10 +35,11 @@ type CapabilitiesConfig struct {
 }
 
 type StateConfig struct {
-	PolicyStore  string `json:"policy_store"`
-	GrantStore   string `json:"grant_store"`
-	SessionStore string `json:"session_store"`
-	AirlockStore string `json:"airlock_store"`
+	PolicyStore   string `json:"policy_store"`
+	GrantStore    string `json:"grant_store"`
+	DeliveryStore string `json:"delivery_store"`
+	SessionStore  string `json:"session_store"`
+	AirlockStore  string `json:"airlock_store"`
 }
 
 type EnforcementConfig struct {
@@ -61,10 +62,11 @@ func Default() Config {
 			HorizonManifestDir: ".continuum/capabilities",
 		},
 		State: StateConfig{
-			PolicyStore:  ".continuum/policies.json",
-			GrantStore:   ".continuum/grants.json",
-			SessionStore: ".continuum/sessions.json",
-			AirlockStore: ".continuum/airlock.json",
+			PolicyStore:   ".continuum/policies.json",
+			GrantStore:    ".continuum/grants.json",
+			DeliveryStore: ".continuum/deliveries.json",
+			SessionStore:  ".continuum/sessions.json",
+			AirlockStore:  ".continuum/airlock.json",
 		},
 		Enforcement: EnforcementConfig{
 			Network: "observe",

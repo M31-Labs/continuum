@@ -135,6 +135,8 @@ func assign(cfg *Config, section, key, value string) error {
 			cfg.State.PolicyStore = value
 		case "grant_store":
 			cfg.State.GrantStore = value
+		case "delivery_store":
+			cfg.State.DeliveryStore = value
 		case "session_store":
 			cfg.State.SessionStore = value
 		case "airlock_store":

@@ -84,6 +84,19 @@ func (s *GrantStore) Active(now time.Time) []Grant {
 	return out
 }
 
+func (s *GrantStore) Expired(now time.Time) []Grant {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	var out []Grant
+	for _, grant := range s.Grants {
+		if grant.Expired(now) {
+			out = append(out, grant)
+		}
+	}
+	return out
+}
+
 func (s *GrantStore) PruneExpired(now time.Time) int {
 	if now.IsZero() {
 		now = time.Now().UTC()

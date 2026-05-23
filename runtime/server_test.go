@@ -42,6 +42,7 @@ func TestHTTPHandlerServesHealthAndCapabilities(t *testing.T) {
 func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
 	dir := t.TempDir()
 	auditPath := filepath.Join(dir, "audit.jsonl")
+	deliveryPath := filepath.Join(dir, "deliveries.json")
 	daemon := NewDaemon(nil)
 	if err := daemon.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -50,6 +51,7 @@ func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
 		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
 		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
 		Audit:         auditPath,
+		Deliveries:    deliveryPath,
 		Airlock:       filepath.Join(dir, "airlock.json"),
 	})
 	body := `{
@@ -80,6 +82,13 @@ func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Decision != "deny" || len(events[0].Delivery) != 1 {
 		t.Fatalf("audit events = %+v", events)
+	}
+	deliveries, err := LoadDeliveryStore(deliveryPath)
+	if err != nil {
+		t.Fatalf("LoadDeliveryStore: %v", err)
+	}
+	if got := deliveries.ByStatus(DeliveryDelivered); len(got) != 1 {
+		t.Fatalf("delivered queue items = %+v", got)
 	}
 }
 
@@ -167,6 +176,7 @@ func TestHTTPHandlerServesStateStores(t *testing.T) {
 	sessionPath := filepath.Join(dir, "sessions.json")
 	grantPath := filepath.Join(dir, "grants.json")
 	airlockPath := filepath.Join(dir, "airlock.json")
+	deliveryPath := filepath.Join(dir, "deliveries.json")
 	auditPath := filepath.Join(dir, "audit.jsonl")
 
 	sessions := &SessionStore{}
@@ -188,6 +198,16 @@ func TestHTTPHandlerServesStateStores(t *testing.T) {
 	if err := airlocks.Save(airlockPath); err != nil {
 		t.Fatalf("save airlocks: %v", err)
 	}
+	deliveries, err := LoadDeliveryStore(deliveryPath)
+	if err != nil {
+		t.Fatalf("load deliveries: %v", err)
+	}
+	if _, err := deliveries.Enqueue(DeliveryItem{AuditID: "evt_1", Capability: "observe.audit", Status: DeliveryPending, CreatedAt: now}); err != nil {
+		t.Fatalf("enqueue delivery: %v", err)
+	}
+	if err := deliveries.Save(); err != nil {
+		t.Fatalf("save deliveries: %v", err)
+	}
 	sink, err := audit.NewJSONLSink(auditPath)
 	if err != nil {
 		t.Fatalf("audit sink: %v", err)
@@ -204,12 +224,13 @@ func TestHTTPHandlerServesStateStores(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	handler := NewHTTPHandlerWithState(daemon, StatePaths{
-		Sessions: sessionPath,
-		Grants:   grantPath,
-		Airlock:  airlockPath,
-		Audit:    auditPath,
+		Sessions:   sessionPath,
+		Grants:     grantPath,
+		Deliveries: deliveryPath,
+		Airlock:    airlockPath,
+		Audit:      auditPath,
 	})
-	for _, path := range []string{"/sessions", "/grants", "/airlocks", "/audit"} {
+	for _, path := range []string{"/sessions", "/grants", "/deliveries", "/airlocks", "/audit"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)

@@ -41,16 +41,16 @@ grants, sessions, and containment state.
 
 - [x] Replace the local `arbiterx` starter evaluator with the real Arbiter
       compiler/VM and expert-rule session API.
-- [ ] Add a Continuum-owned event source adapter for local synthetic process,
+- [x] Add a Continuum-owned event source adapter for local synthetic process,
       file, and network fixtures.
-- [ ] Add an actual delivery queue for source -> engine -> sink/worker flow.
-- [ ] Add cgroup identity capture in `continuum run`.
+- [x] Add an actual delivery queue for source -> engine -> sink/worker flow.
+- [x] Add cgroup identity capture in `continuum run`.
 - [ ] Add process-tree lifecycle tracking beyond the root process.
-- [ ] Add explicit containment backend interfaces for cgroup/network namespace
+- [x] Add explicit containment backend interfaces for cgroup/network namespace
       operations while keeping observe/noop as the default.
-- [ ] Add revocation delivery for temporary grants, not only grant-store
+- [x] Add revocation delivery for temporary grants, not only grant-store
       expiry.
-- [ ] Add a daemon client for CLI commands so commands can use a running local
+- [x] Add a daemon client for CLI commands so commands can use a running local
       agent instead of direct store reads when requested.
 
 ## Non-Goals Until Proven

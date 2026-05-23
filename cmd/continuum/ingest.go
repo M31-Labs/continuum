@@ -19,11 +19,13 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("ingest", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "config path")
+	daemonURL := fs.String("daemon", "", "daemon base URL for remote ingest")
 	policyPath := fs.String("policy", "", "policy path")
 	policyStorePath := fs.String("policy-store", ".continuum/policies.json", "policy store")
 	eventsPath := fs.String("events", "", "events JSON or JSONL path")
 	auditPath := fs.String("audit", ".continuum/audit.jsonl", "audit JSONL path")
 	grantPath := fs.String("grants", ".continuum/grants.json", "grant store")
+	deliveryPath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	approvalFlag := fs.String("approval", "deny", "approval mode: deny, allow, cli")
 	manifestDir := fs.String("manifest-dir", "", "Horizon capability manifest directory for Horizon event envelopes")
 	airlockPolicyPath := fs.String("airlock-policy", cruntime.DefaultAirlockPolicyPath, "airlock policy path")
@@ -41,6 +43,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	}
 	*policyStorePath = resolvePolicyStorePath(*policyStorePath, cfg)
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
+	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	*airlockStorePath = resolveAirlockStorePath(*airlockStorePath, cfg)
 	resolvedPolicy, err := resolvePolicyPath(*policyPath, *policyStorePath, cfg)
 	if err != nil {
@@ -49,6 +52,36 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	*auditPath = resolveAuditPath(*auditPath, false, cfg)
 	if *manifestDir == "" && cfg.ConfigPath != "<default>" {
 		*manifestDir = cfg.Config.Capabilities.HorizonManifestDir
+	}
+	if *daemonURL != "" {
+		data, err := os.ReadFile(*eventsPath)
+		if err != nil {
+			return err
+		}
+		result, err := cruntime.NewClient(*daemonURL).Ingest(context.Background(), data, cruntime.ClientIngestOptions{
+			PolicyPath:    resolvedPolicy,
+			PolicyStore:   *policyStorePath,
+			GrantStore:    *grantPath,
+			DeliveryStore: *deliveryPath,
+			AuditPath:     *auditPath,
+			AirlockPolicy: *airlockPolicyPath,
+			AirlockStore:  *airlockStorePath,
+			NoAirlock:     *noAirlock,
+		})
+		if err != nil {
+			return err
+		}
+		for _, record := range result.Records {
+			printAuditLine(stdout, record)
+		}
+		for _, result := range result.Airlocks {
+			if result.Session == nil {
+				continue
+			}
+			fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s reason=%q state=%s audit=%s\n", result.Behavior.Subject, result.Session.Reason, result.Session.State, result.Record.ID)
+		}
+		fmt.Fprintf(stdout, "ingested=%d audit=%s policy=%s daemon=%s\n", result.Ingested, result.Audit, result.Policy, *daemonURL)
+		return nil
 	}
 	bundle, err := arbiterx.CompileFile(resolvedPolicy)
 	if err != nil {
@@ -64,6 +97,11 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	}
 	defer sink.Close()
 	engine := cruntime.NewEngine(bundle, sink)
+	queue, err := cruntime.LoadDeliveryStore(*deliveryPath)
+	if err != nil {
+		return err
+	}
+	engine.Queue = queue
 	if grants, err := capability.LoadGrantStore(*grantPath); err == nil {
 		engine.Grants = grants.Active(time.Now().UTC())
 	} else if !os.IsNotExist(err) {
@@ -98,7 +136,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s reason=%q state=%s audit=%s\n", result.Behavior.Subject, result.Session.Reason, result.Session.State, result.Record.ID)
 		}
 	}
-	fmt.Fprintf(stdout, "ingested=%d audit=%s policy=%s\n", len(events), *auditPath, resolvedPolicy)
+	fmt.Fprintf(stdout, "ingested=%d audit=%s policy=%s deliveries=%s\n", len(events), *auditPath, resolvedPolicy, *deliveryPath)
 	return nil
 }
 

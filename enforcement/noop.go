@@ -16,7 +16,16 @@ func (NoopBackend) Capabilities() []capability.Capability {
 	}
 }
 
-func (NoopBackend) Grant(context.Context, NetworkGrant) error { return nil }
-func (NoopBackend) Deny(context.Context, NetworkDeny) error   { return nil }
-func (NoopBackend) Kill(context.Context, ProcessKill) error   { return nil }
-func (NoopBackend) DenyPath(context.Context, FileDeny) error  { return nil }
+func (NoopBackend) Grant(context.Context, NetworkGrant) error  { return nil }
+func (NoopBackend) Deny(context.Context, NetworkDeny) error    { return nil }
+func (NoopBackend) Kill(context.Context, ProcessKill) error    { return nil }
+func (NoopBackend) DenyPath(context.Context, FileDeny) error   { return nil }
+func (NoopBackend) Attach(context.Context, CgroupAttach) error { return nil }
+func (NoopBackend) Freeze(context.Context, CgroupFreeze) error { return nil }
+func (NoopBackend) Thaw(context.Context, CgroupThaw) error     { return nil }
+func (NoopBackend) Isolate(context.Context, NamespaceIsolation) error {
+	return nil
+}
+func (NoopBackend) ReleaseIsolation(context.Context, NamespaceRelease) error {
+	return nil
+}

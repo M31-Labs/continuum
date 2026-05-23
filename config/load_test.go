@@ -23,6 +23,9 @@ func TestLoadExampleConfig(t *testing.T) {
 	if cfg.State.PolicyStore != ".continuum/policies.json" {
 		t.Fatalf("policy store = %q", cfg.State.PolicyStore)
 	}
+	if cfg.State.DeliveryStore != ".continuum/deliveries.json" {
+		t.Fatalf("delivery store = %q", cfg.State.DeliveryStore)
+	}
 }
 
 func TestLoadRejectsUnknownKey(t *testing.T) {
@@ -61,5 +64,8 @@ func TestResolvePathsRelativeToConfig(t *testing.T) {
 	}
 	if resolved.State.GrantStore != filepath.Join("examples", "agent-workdir", ".continuum", "grants.json") {
 		t.Fatalf("grant store = %q", resolved.State.GrantStore)
+	}
+	if resolved.State.DeliveryStore != filepath.Join("examples", "agent-workdir", ".continuum", "deliveries.json") {
+		t.Fatalf("delivery store = %q", resolved.State.DeliveryStore)
 	}
 }

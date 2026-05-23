@@ -37,6 +37,7 @@ func main() {
 			PolicyBundle: cfg.Policy.Bundle,
 			Sessions:     cfg.State.SessionStore,
 			Grants:       cfg.State.GrantStore,
+			Deliveries:   cfg.State.DeliveryStore,
 			Airlock:      cfg.State.AirlockStore,
 			Audit:        cfg.Audit.Path,
 		})

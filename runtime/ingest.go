@@ -25,6 +25,7 @@ type IngestOptions struct {
 	PolicyPath    string
 	PolicyStore   string
 	GrantStore    string
+	DeliveryStore string
 	AuditPath     string
 	Registry      *capability.Registry
 	Now           func() time.Time
@@ -79,6 +80,13 @@ func IngestEvents(ctx context.Context, events []event.Event, opts IngestOptions)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return IngestResult{}, err
 		}
+	}
+	if opts.DeliveryStore != "" {
+		queue, err := LoadDeliveryStore(opts.DeliveryStore)
+		if err != nil {
+			return IngestResult{}, err
+		}
+		engine.Queue = queue
 	}
 	records := make([]audit.Event, 0, len(events))
 	for _, evt := range events {

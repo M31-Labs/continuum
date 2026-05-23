@@ -19,6 +19,7 @@ type StatePaths struct {
 	PolicyBundle  string
 	Sessions      string
 	Grants        string
+	Deliveries    string
 	Airlock       string
 	AirlockPolicy string
 	Audit         string
@@ -84,6 +85,21 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 		}
 		writeJSON(w, store.List())
 	})
+	mux.HandleFunc("/deliveries", func(w http.ResponseWriter, r *http.Request) {
+		if !requireGET(w, r) {
+			return
+		}
+		store, err := LoadDeliveryStore(queryPathAny(r, []string{"path", "delivery-store", "delivery_store"}, paths.Deliveries))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		items := store.List()
+		if status := r.URL.Query().Get("status"); status != "" {
+			items = store.ByStatus(DeliveryStatus(status))
+		}
+		writeJSON(w, items)
+	})
 	mux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 		if !requireGET(w, r) {
 			return
@@ -125,6 +141,7 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 			PolicyPath:    queryPathAny(r, []string{"policy", "policy_path"}, paths.PolicyBundle),
 			PolicyStore:   queryPathAny(r, []string{"policy-store", "policy_store"}, paths.PolicyStore),
 			GrantStore:    queryPathAny(r, []string{"grants", "grant-store", "grant_store"}, paths.Grants),
+			DeliveryStore: queryPathAny(r, []string{"delivery-store", "delivery_store"}, paths.Deliveries),
 			AuditPath:     queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
 			Registry:      daemon.Registry,
 			EnableAirlock: !truthy(r.URL.Query().Get("no_airlock")),
@@ -155,6 +172,9 @@ func (p StatePaths) withDefaults() StatePaths {
 	}
 	if p.Grants == "" {
 		p.Grants = ".continuum/grants.json"
+	}
+	if p.Deliveries == "" {
+		p.Deliveries = ".continuum/deliveries.json"
 	}
 	if p.Airlock == "" {
 		p.Airlock = ".continuum/airlock.json"

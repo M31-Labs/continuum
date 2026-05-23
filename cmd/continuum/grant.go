@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"m31labs.dev/continuum/capability"
+	cruntime "m31labs.dev/continuum/runtime"
 )
 
 func runGrant(args []string, stdout, stderr io.Writer) error {
@@ -172,6 +173,7 @@ func runGrantRevoke(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "continuum.toml", "config path")
 	storePath := fs.String("store", defaultGrantStorePath, "grant store")
+	deliveryPath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -183,6 +185,7 @@ func runGrantRevoke(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	*storePath = resolveGrantStorePath(*storePath, cfg)
+	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	store, err := capability.LoadGrantStore(*storePath)
 	if err != nil {
 		return err
@@ -194,7 +197,11 @@ func runGrantRevoke(args []string, stdout, stderr io.Writer) error {
 	if err := store.Save(*storePath); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "revoked grant id=%s session=%s capability=%s\n", grant.ID, grant.Session, grant.Capability)
+	delivery, err := cruntime.EnqueueGrantRevocation(*deliveryPath, grant, "grant revoked", grant.RevokedAt)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "revoked grant id=%s session=%s capability=%s delivery=%s\n", grant.ID, grant.Session, grant.Capability, delivery.ID)
 	return nil
 }
 
@@ -203,6 +210,7 @@ func runGrantPrune(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "continuum.toml", "config path")
 	storePath := fs.String("store", defaultGrantStorePath, "grant store")
+	deliveryPath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -211,11 +219,19 @@ func runGrantPrune(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	*storePath = resolveGrantStorePath(*storePath, cfg)
+	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	store, err := capability.LoadGrantStore(*storePath)
 	if err != nil {
 		return err
 	}
-	removed := store.PruneExpired(time.Now().UTC())
+	now := time.Now().UTC()
+	expired := store.Expired(now)
+	for _, grant := range expired {
+		if _, err := cruntime.EnqueueGrantRevocation(*deliveryPath, grant, "grant expired", now); err != nil {
+			return err
+		}
+	}
+	removed := store.PruneExpired(now)
 	if err := store.Save(*storePath); err != nil {
 		return err
 	}

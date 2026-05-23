@@ -171,6 +171,7 @@ func TestConfigStatePathsDriveCommands(t *testing.T) {
 	configPath := filepath.Join(dir, "continuum.toml")
 	policyStore := filepath.Join(dir, "state", "policies.json")
 	grantStore := filepath.Join(dir, "state", "grants.json")
+	deliveryStore := filepath.Join(dir, "state", "deliveries.json")
 	sessionStore := filepath.Join(dir, "state", "sessions.json")
 	airlockStore := filepath.Join(dir, "state", "airlock.json")
 	auditPath := filepath.Join(dir, "state", "audit.jsonl")
@@ -199,6 +200,7 @@ horizon_manifest_dir = "../../testdata/horizon-manifests"
 [state]
 policy_store = "state/policies.json"
 grant_store = "state/grants.json"
+delivery_store = "state/deliveries.json"
 session_store = "state/sessions.json"
 airlock_store = "state/airlock.json"
 
@@ -247,6 +249,9 @@ kind = "cli"
 	}
 	if _, err := os.Stat(auditPath); err != nil {
 		t.Fatalf("audit log not created at config path: %v", err)
+	}
+	if _, err := os.Stat(deliveryStore); err != nil {
+		t.Fatalf("delivery store not created at config path: %v", err)
 	}
 	out.Reset()
 	if err := run([]string{"sessions", "list", "--config", configPath}, &out, &errOut); err != nil {
@@ -648,6 +653,41 @@ func TestIngestApprovalAllowCreatesGrant(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ALLOW file.access") || strings.Contains(out.String(), "approval=denied") {
 		t.Fatalf("grant-backed ingest output = %q", out.String())
+	}
+}
+
+func TestGrantRevokeQueuesDelivery(t *testing.T) {
+	dir := t.TempDir()
+	grantPath := filepath.Join(dir, "grants.json")
+	deliveryPath := filepath.Join(dir, "deliveries.json")
+	var out, errOut bytes.Buffer
+	if err := run([]string{"grant", "--store", grantPath, "--session", "agent-42", "--capability", "network.connect", "--host", "github.com"}, &out, &errOut); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	fields := strings.Fields(out.String())
+	var grantID string
+	for _, field := range fields {
+		if strings.HasPrefix(field, "id=") {
+			grantID = strings.TrimPrefix(field, "id=")
+		}
+	}
+	if grantID == "" {
+		t.Fatalf("grant output missing id: %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"grant", "revoke", "--store", grantPath, "--delivery-store", deliveryPath, grantID}, &out, &errOut); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	if !strings.Contains(out.String(), "delivery=") {
+		t.Fatalf("revoke output = %q", out.String())
+	}
+	queue, err := cruntime.LoadDeliveryStore(deliveryPath)
+	if err != nil {
+		t.Fatalf("LoadDeliveryStore: %v", err)
+	}
+	items := queue.ByStatus(cruntime.DeliveryPending)
+	if len(items) != 1 || items[0].Capability != cruntime.GrantRevocationCapability {
+		t.Fatalf("delivery items = %+v", queue.List())
 	}
 }
 

@@ -44,6 +44,7 @@ continuum sessions list
 continuum sessions show agent-session-42
 continuum agent start --config continuum.toml --listen 127.0.0.1:8787
 curl -X POST --data-binary @events.jsonl http://127.0.0.1:8787/ingest
+continuum ingest --daemon http://127.0.0.1:8787 --events events.jsonl
 continuum capabilities
 continuum grant --session agent-session-42 --capability network.connect --host github.com --port 443 --ttl 20m --reason "fetch dependency"
 continuum grant --session agent-session-42 --capability file.write --path .github/workflows/test.yml --op write --ttl 20m --reason "approve CI edit"
@@ -70,6 +71,7 @@ V0 is observe-first. It can:
 - inspect published policies with `policy list` and `policy show`
 - create governed sessions for `continuum run`
 - ingest Continuum event JSON, JSON arrays, JSONL, audit JSONL, or Horizon event envelopes
+- feed local synthetic fixtures through the same source loop used by runtime sources
 - normalize events into facts
 - evaluate the starter agent and airlock policies
 - route outcomes through registered capabilities
@@ -103,6 +105,7 @@ path = ".continuum/audit.jsonl"
 [state]
 policy_store = ".continuum/policies.json"
 grant_store = ".continuum/grants.json"
+delivery_store = ".continuum/deliveries.json"
 session_store = ".continuum/sessions.json"
 airlock_store = ".continuum/airlock.json"
 ```
