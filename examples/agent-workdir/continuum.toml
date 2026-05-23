@@ -1,0 +1,25 @@
+[project]
+name = "agent-workdir"
+version = "0.1.0"
+
+[policy]
+bundle = "policies/main.arb"
+
+[audit]
+kind = "jsonl"
+path = ".continuum/audit.jsonl"
+
+[subject]
+default_kind = "agent"
+default_mode = "ask"
+
+[capabilities]
+horizon_manifest_dir = ".continuum/capabilities"
+
+[enforcement]
+network = "observe"
+file = "observe"
+process = "observe"
+
+[approval]
+kind = "cli"

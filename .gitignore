@@ -1,0 +1,6 @@
+.continuum/
+continuum
+continuum-agent
+coverage.out
+*.test
+*.prof

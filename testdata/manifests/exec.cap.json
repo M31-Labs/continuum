@@ -1,0 +1,8 @@
+{
+  "name": "kernel.process.exec.observe",
+  "kind": "source",
+  "danger": "observe",
+  "program": "OnExec",
+  "section": "tracepoint/sched/sched_process_exec",
+  "emits": "ExecEvent"
+}

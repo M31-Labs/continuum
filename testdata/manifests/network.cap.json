@@ -1,0 +1,8 @@
+{
+  "name": "kernel.network.connect.observe",
+  "kind": "source",
+  "danger": "observe",
+  "program": "OnConnect",
+  "section": "cgroup/connect4",
+  "emits": "NetworkConnectEvent"
+}

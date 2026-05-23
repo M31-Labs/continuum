@@ -1,0 +1,8 @@
+{
+  "subject": "process-tree:demo",
+  "exec_count": 42,
+  "unique_network_targets": 88,
+  "touched_secret_paths": 0,
+  "rewritten_files": 4,
+  "entropy_increase_score": 0.1
+}

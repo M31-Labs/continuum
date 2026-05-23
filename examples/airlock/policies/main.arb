@@ -1,0 +1,35 @@
+fact Behavior {
+    subject: string
+    exec_count: number
+    unique_network_targets: number
+    touched_secret_paths: number
+    rewritten_files: number
+    entropy_increase_score: number
+}
+
+outcome EnterAirlock {
+    subject: string
+    reason: string
+}
+
+expert rule DetectWormLikeFanout priority 10 {
+    when {
+        behavior.unique_network_targets > 50
+        and behavior.exec_count > 20
+    }
+    then emit EnterAirlock {
+        subject: behavior.subject,
+        reason: "worm-like process/network fanout",
+    }
+}
+
+expert rule DetectRansomwareLikeRewrite priority 10 {
+    when {
+        behavior.rewritten_files > 100
+        and behavior.entropy_increase_score > 0.8
+    }
+    then emit EnterAirlock {
+        subject: behavior.subject,
+        reason: "ransomware-like rewrite/encryption pattern",
+    }
+}

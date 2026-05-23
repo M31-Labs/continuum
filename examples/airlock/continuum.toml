@@ -1,0 +1,25 @@
+[project]
+name = "airlock"
+version = "0.1.0"
+
+[policy]
+bundle = "policies/main.arb"
+
+[audit]
+kind = "jsonl"
+path = ".continuum/airlock-audit.jsonl"
+
+[subject]
+default_kind = "process-tree"
+default_mode = "observe"
+
+[capabilities]
+horizon_manifest_dir = ".continuum/capabilities"
+
+[enforcement]
+network = "observe"
+file = "observe"
+process = "observe"
+
+[approval]
+kind = "cli"

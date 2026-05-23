@@ -1,0 +1,84 @@
+input {
+    agent: {
+        session: string
+        name: string
+        repo_root: string
+        task: string
+    }
+
+    file: {
+        path: string
+        op: string
+    }
+
+    net: {
+        host: string
+        ip: string
+        port: number
+    }
+
+    process: {
+        pid: number
+        comm: string
+        argv_text: string
+    }
+}
+
+outcome Allow {
+    reason: string
+}
+
+outcome Deny {
+    reason: string
+}
+
+outcome AskHuman {
+    question: string
+    risk: string
+}
+
+segment inside_repo {
+    file.path starts_with agent.repo_root
+}
+
+segment host_secret {
+    file.path matches ".*/\\.(ssh|aws|kube)/.*"
+}
+
+rule DenyHostSecrets priority 1 {
+    when segment host_secret {
+        true
+    }
+    then Deny {
+        reason: "agent cannot access host credential material",
+    }
+}
+
+rule AskOnCIWrites priority 5 {
+    when {
+        file.path matches ".*/\\.github/workflows/.*"
+        and file.op == "write"
+    }
+    then AskHuman {
+        question: "Agent wants to modify CI workflow",
+        risk: "CI workflow changes can create persistence or exfiltration paths",
+    }
+}
+
+rule AllowInsideRepo priority 50 {
+    when segment inside_repo {
+        true
+    }
+    then Allow {
+        reason: "inside declared repository root",
+    }
+}
+
+rule DenyCloudMetadata priority 1 {
+    when {
+        net.ip == "169.254.169.254"
+    }
+    then Deny {
+        reason: "cloud metadata service is blocked",
+    }
+}

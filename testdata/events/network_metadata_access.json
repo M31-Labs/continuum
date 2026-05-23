@@ -1,0 +1,18 @@
+{
+  "id": "evt_metadata",
+  "source": "fixture",
+  "kind": "network.connect",
+  "subject": {
+    "kind": "agent",
+    "id": "agent:claude",
+    "session": "agent-42",
+    "pid": 4242,
+    "repo_root": "/home/draco/src/app",
+    "agent_name": "claude"
+  },
+  "fields": {
+    "host": "169.254.169.254",
+    "ip": "169.254.169.254",
+    "port": 80
+  }
+}
