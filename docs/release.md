@@ -26,6 +26,7 @@ Before tagging:
 - `examples/demo-v0.sh` passes locally
 - `PRODUCTION_HARDENING.md` accurately reflects remaining gaps
 - `README.md` and `SECURITY.md` match the release claims
+- audit schema docs were reviewed for any audit serialization changes
 
 ## Tagging
 
@@ -42,6 +43,24 @@ go build \
   -ldflags "-X main.version=$VERSION -X main.commit=$(git rev-parse HEAD) -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   ./cmd/continuum
 ```
+
+## Signed Audit Schema Artifact
+
+Every tagged release publishes an audit schema documentation artifact and signs
+the checksum with Sigstore keyless signing from GitHub Actions OIDC:
+
+- `audit-schema-docs-$VERSION.tar.gz`
+- `audit-schema-docs-$VERSION.sha256`
+- `audit-schema-docs-$VERSION.sha256.sigstore.json`
+
+Build the artifact locally with:
+
+```sh
+make audit-schema-artifact VERSION="$VERSION"
+```
+
+The release workflow verifies the checksum signature identity against
+`.github/workflows/release.yml` at the pushed tag before publishing the assets.
 
 ## Changelog
 

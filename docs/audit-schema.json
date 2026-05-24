@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m31labs.dev/continuum/schemas/audit-event-v1.json",
+  "title": "Continuum audit event v1",
+  "description": "JSON Schema for one line in a Continuum audit JSONL stream.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "time",
+    "subject",
+    "input_event",
+    "outcome",
+    "decision"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable audit event identifier."
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Continuum decision recording time in RFC3339 format."
+    },
+    "clock": {
+      "$ref": "#/$defs/clock"
+    },
+    "subject": {
+      "$ref": "#/$defs/subject"
+    },
+    "input_event": {
+      "$ref": "#/$defs/input_event"
+    },
+    "policy": {
+      "type": "string",
+      "description": "Policy bundle identifier or operator policy label."
+    },
+    "outcome": {
+      "$ref": "#/$defs/outcome"
+    },
+    "decision": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Normalized decision label, such as allow, deny, ask, audit, grant, kill, enter_airlock, release_airlock, or remediate_airlock."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable decision reason when supplied by policy or operator action."
+    },
+    "arbitraces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/arbitrace_step"
+      }
+    },
+    "capability": {
+      "type": "string",
+      "description": "Capability route selected for the outcome."
+    },
+    "enforcement": {
+      "type": "string",
+      "description": "Enforcement backend label, commonly observe for v0 workloads."
+    },
+    "delivery": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/delivery_attempt"
+      }
+    },
+    "chain_prev": {
+      "$ref": "#/$defs/sha256_hex",
+      "description": "Previous audit chain hash, omitted for the first event."
+    },
+    "chain_hash": {
+      "$ref": "#/$defs/sha256_hex",
+      "description": "Hash-chain digest for this audit event."
+    }
+  },
+  "$defs": {
+    "arbitrary_object": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "recorded_at",
+        "event_time_source"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "event_time_source": {
+          "type": "string",
+          "enum": [
+            "input_event",
+            "recorded_clock"
+          ]
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "cgroup": {
+          "type": "string"
+        },
+        "repo_root": {
+          "type": "string"
+        },
+        "agent_name": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        }
+      }
+    },
+    "input_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string"
+        },
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "fields": {
+          "$ref": "#/$defs/arbitrary_object"
+        },
+        "raw": {
+          "$ref": "#/$defs/arbitrary_object"
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "fields": {
+          "$ref": "#/$defs/arbitrary_object"
+        }
+      }
+    },
+    "arbitrace_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rule": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "delivery_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "time",
+        "capability",
+        "status"
+      ],
+      "properties": {
+        "delivery_id": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "capability": {
+          "type": "string"
+        },
+        "enforcement": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

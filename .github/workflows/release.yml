@@ -1,0 +1,78 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  audit-schema-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.10'
+
+      - name: Test audit schema docs
+        run: go test ./audit
+
+      - name: Build audit schema artifact
+        run: make audit-schema-artifact VERSION="${GITHUB_REF_NAME}"
+
+      - name: Install cosign
+        run: |
+          go install github.com/sigstore/cosign/v2/cmd/cosign@v2.6.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Sign audit schema checksum
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign-blob --yes \
+            --oidc-provider github-actions \
+            --bundle "dist/audit-schema-docs-${GITHUB_REF_NAME}.sha256.sigstore.json" \
+            "dist/audit-schema-docs-${GITHUB_REF_NAME}.sha256"
+
+      - name: Verify audit schema checksum signature
+        run: |
+          cosign verify-blob \
+            --bundle "dist/audit-schema-docs-${GITHUB_REF_NAME}.sha256.sigstore.json" \
+            --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "dist/audit-schema-docs-${GITHUB_REF_NAME}.sha256"
+
+      - name: Verify audit schema archive checksum
+        run: |
+          cd dist
+          sha256sum -c "audit-schema-docs-${GITHUB_REF_NAME}.sha256"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: audit-schema-docs-${{ github.ref_name }}
+          path: |
+            dist/audit-schema-docs-${{ github.ref_name }}.tar.gz
+            dist/audit-schema-docs-${{ github.ref_name }}.sha256
+            dist/audit-schema-docs-${{ github.ref_name }}.sha256.sigstore.json
+          if-no-files-found: error
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=(
+            "dist/audit-schema-docs-${GITHUB_REF_NAME}.tar.gz"
+            "dist/audit-schema-docs-${GITHUB_REF_NAME}.sha256"
+            "dist/audit-schema-docs-${GITHUB_REF_NAME}.sha256.sigstore.json"
+          )
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
+              --title "${GITHUB_REF_NAME}" \
+              --notes "Observe-mode Continuum release. Audit schema docs are signed with GitHub Actions OIDC."
+          fi

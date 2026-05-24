@@ -96,7 +96,7 @@ enforcement backends exist and are reviewed.
 - [x] Add audit event size limits.
 - [x] Add audit clock-source metadata.
 - [x] Add delivery attempt linkage checks in audit tests.
-- [ ] Add signed release artifact for audit schema docs.
+- [x] Add signed release artifact for audit schema docs.
 
 ## Runtime And Sessions
 

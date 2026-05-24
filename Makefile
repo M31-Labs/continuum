@@ -1,4 +1,7 @@
-.PHONY: test fmt vet race
+VERSION ?= dev
+DIST_DIR ?= dist
+
+.PHONY: test fmt vet race audit-schema-artifact
 
 test:
 	go test ./...
@@ -11,3 +14,6 @@ vet:
 
 race:
 	go test -race ./...
+
+audit-schema-artifact:
+	VERSION="$(VERSION)" DIST_DIR="$(DIST_DIR)" bash scripts/build-audit-schema-artifact.sh

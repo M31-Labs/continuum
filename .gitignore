@@ -2,5 +2,6 @@
 /continuum
 /continuum-agent
 coverage.out
+/dist/
 *.test
 *.prof
