@@ -66,6 +66,9 @@ continuum airlock release --session airlock-123
 examples/demo-v0.sh
 ```
 
+For production-style observe-mode pilots, see
+[docs/observe-mode-pilot.md](docs/observe-mode-pilot.md).
+
 ## V0 Surface
 
 V0 is observe-first. It can:

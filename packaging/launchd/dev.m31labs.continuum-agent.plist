@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.m31labs.continuum-agent</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/continuum</string>
+    <string>agent</string>
+    <string>start</string>
+    <string>--config</string>
+    <string>/usr/local/etc/continuum/continuum.toml</string>
+    <string>--unix-socket</string>
+    <string>/usr/local/var/run/continuum/daemon.sock</string>
+    <string>--auth-reads</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/usr/local/var/log/continuum/stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/usr/local/var/log/continuum/stderr.log</string>
+</dict>
+</plist>

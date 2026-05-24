@@ -1,0 +1,21 @@
+[Unit]
+Description=Continuum governed capability daemon
+Documentation=https://github.com/M31-Labs/continuum
+After=network.target
+
+[Service]
+Type=simple
+User=continuum
+Group=continuum
+EnvironmentFile=-/etc/continuum/continuum.env
+ExecStart=/usr/local/bin/continuum agent start --config /etc/continuum/continuum.toml --listen 127.0.0.1:8787 --auth-reads
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/continuum /var/log/continuum
+
+[Install]
+WantedBy=multi-user.target

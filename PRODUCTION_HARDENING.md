@@ -125,12 +125,12 @@ enforcement backends exist and are reviewed.
 - [x] Add `continuum version` with commit and build metadata.
 - [ ] Add structured JSON output for every inspection command.
 - [x] Add clear public README status badges and safety boundary language.
-- [ ] Add quickstart for observe-mode production pilot.
-- [ ] Add systemd unit example.
-- [ ] Add launchd plist example.
+- [x] Add quickstart for observe-mode production pilot.
+- [x] Add systemd unit example.
+- [x] Add launchd plist example.
 - [ ] Add container image build.
 - [ ] Add release packaging for Linux and macOS.
-- [ ] Add changelog and release process.
+- [x] Add changelog and release process.
 
 ## CI And Quality Gates
 
@@ -143,7 +143,7 @@ enforcement backends exist and are reviewed.
 - [ ] Add golden tests for daemon error responses.
 - [ ] Add integration test for daemon ingest plus session persistence.
 - [x] Add public-repo secret scanning guidance.
-- [ ] Add dependency update policy.
+- [x] Add dependency update policy.
 
 ## Security Review
 
