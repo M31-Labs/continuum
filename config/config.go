@@ -33,7 +33,9 @@ type SubjectConfig struct {
 }
 
 type CapabilitiesConfig struct {
-	HorizonManifestDir string `json:"horizon_manifest_dir"`
+	HorizonManifestDir          string `json:"horizon_manifest_dir"`
+	ManifestSignatureMode       string `json:"manifest_signature_mode,omitempty"`
+	ManifestSignaturePublicKeys string `json:"manifest_signature_public_keys,omitempty"`
 }
 
 type StateConfig struct {
@@ -71,7 +73,8 @@ func Default() Config {
 		Audit:   AuditConfig{Kind: "jsonl", Path: ".continuum/audit.jsonl"},
 		Subject: SubjectConfig{DefaultKind: "agent", DefaultMode: "ask"},
 		Capabilities: CapabilitiesConfig{
-			HorizonManifestDir: ".continuum/capabilities",
+			HorizonManifestDir:    ".continuum/capabilities",
+			ManifestSignatureMode: "off",
 		},
 		State: StateConfig{
 			PolicyStore:             ".continuum/policies.json",

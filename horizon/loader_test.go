@@ -1,7 +1,13 @@
 package horizon
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"m31labs.dev/continuum/capability"
@@ -78,4 +84,123 @@ func TestHorizonManifestToRegistryCapabilityGolden(t *testing.T) {
 		t.Fatalf("LoadDir: %v", err)
 	}
 	testutil.EqualGoldenJSON(t, filepath.Join("..", "testdata", "golden", "horizon_exec_capabilities.json"), caps)
+}
+
+func TestLoadDirRequiresSignedManifest(t *testing.T) {
+	dir, pub := writeSignedManifestFixture(t)
+	caps, err := LoadDirWithOptions(dir, LoadOptions{
+		Signature: SignatureOptions{
+			Mode:       SignatureRequire,
+			PublicKeys: []TrustedPublicKey{{ID: "test-key", Key: pub}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("LoadDirWithOptions: %v", err)
+	}
+	if len(caps) != 1 {
+		t.Fatalf("caps = %+v", caps)
+	}
+	if got := caps[0].Metadata["continuum.horizon.manifest_signature.verified"]; got != true {
+		t.Fatalf("signature verified metadata = %#v", got)
+	}
+	if got := caps[0].Metadata["continuum.horizon.manifest_signature.key_id"]; got != "test-key" {
+		t.Fatalf("signature key id = %#v", got)
+	}
+}
+
+func TestLoadDirRequiresSignatureSidecar(t *testing.T) {
+	dir := copyManifestFixture(t)
+	_, err := LoadDirWithOptions(dir, LoadOptions{
+		Signature: SignatureOptions{
+			Mode:       SignatureRequire,
+			PublicKeys: []TrustedPublicKey{{ID: "test-key", Key: make(ed25519.PublicKey, ed25519.PublicKeySize)}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "read signature sidecar") {
+		t.Fatalf("LoadDirWithOptions error = %v", err)
+	}
+}
+
+func TestLoadDirRejectsTamperedSignedManifest(t *testing.T) {
+	dir, pub := writeSignedManifestFixture(t)
+	path := filepath.Join(dir, "exec.cap.json")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = LoadDirWithOptions(dir, LoadOptions{
+		Signature: SignatureOptions{
+			Mode:       SignatureRequire,
+			PublicKeys: []TrustedPublicKey{{ID: "test-key", Key: pub}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "signature verification failed") {
+		t.Fatalf("LoadDirWithOptions error = %v", err)
+	}
+}
+
+func TestLoadDirWarnsOnUnsignedManifest(t *testing.T) {
+	dir := copyManifestFixture(t)
+	caps, err := LoadDirWithOptions(dir, LoadOptions{
+		Signature: SignatureOptions{Mode: SignatureWarn},
+	})
+	if err != nil {
+		t.Fatalf("LoadDirWithOptions: %v", err)
+	}
+	if len(caps) != 1 {
+		t.Fatalf("caps = %+v", caps)
+	}
+	if got := caps[0].Metadata["continuum.horizon.manifest_signature.verified"]; got != false {
+		t.Fatalf("signature verified metadata = %#v", got)
+	}
+	if got := caps[0].Metadata["continuum.horizon.manifest_signature.error"]; got == "" {
+		t.Fatalf("missing signature warning metadata: %+v", caps[0].Metadata)
+	}
+}
+
+func writeSignedManifestFixture(t *testing.T) (string, ed25519.PublicKey) {
+	t.Helper()
+	dir := copyManifestFixture(t)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "exec.cap.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope := signatureEnvelope{
+		Schema:    SignatureSchemaV0,
+		Algorithm: "ed25519",
+		KeyID:     "test-key",
+		Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, data)),
+	}
+	sig, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path+".sig", sig, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return dir, pub
+}
+
+func copyManifestFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	data, err := os.ReadFile(filepath.Join("..", "testdata", "horizon-manifests", "exec.cap.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "exec.cap.json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }

@@ -40,6 +40,15 @@ func runReplay(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	manifestDir := ""
+	loadOptions := horizon.LoadOptions{}
+	if cfg.ConfigPath != "<default>" {
+		manifestDir = cfg.Config.Capabilities.HorizonManifestDir
+		loadOptions, err = horizonLoadOptionsFromConfig(cfg.Config)
+		if err != nil {
+			return err
+		}
+	}
 	resolvedPolicy, err := resolvePolicyPath(*policyPath, *policyStorePath, cfg)
 	if err != nil {
 		return err
@@ -48,7 +57,7 @@ func runReplay(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	events, err := loadEvents(*eventsPath)
+	events, err := loadEventsWithHorizonOptions(*eventsPath, manifestDir, loadOptions)
 	if err != nil {
 		return err
 	}
@@ -91,11 +100,15 @@ func loadEvents(path string) ([]event.Event, error) {
 }
 
 func loadEventsWithHorizon(path string, manifestDir string) ([]event.Event, error) {
+	return loadEventsWithHorizonOptions(path, manifestDir, horizon.LoadOptions{})
+}
+
+func loadEventsWithHorizonOptions(path string, manifestDir string, loadOptions horizon.LoadOptions) ([]event.Event, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	caps, err := loadHorizonCaps(manifestDir)
+	caps, err := loadHorizonCaps(manifestDir, loadOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -184,12 +197,12 @@ func eventFromRawJSON(data []byte, caps map[string]capability.Capability) (event
 	return event.Event{}, fmt.Errorf("event kind is required")
 }
 
-func loadHorizonCaps(manifestDir string) (map[string]capability.Capability, error) {
+func loadHorizonCaps(manifestDir string, loadOptions horizon.LoadOptions) (map[string]capability.Capability, error) {
 	out := map[string]capability.Capability{}
 	if manifestDir == "" {
 		return out, nil
 	}
-	caps, err := horizon.LoadDir(manifestDir)
+	caps, err := horizon.LoadDirWithOptions(manifestDir, loadOptions)
 	if err != nil {
 		return nil, err
 	}

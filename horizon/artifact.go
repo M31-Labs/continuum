@@ -39,9 +39,14 @@ type ArtifactInspection struct {
 	Message      string                  `json:"message,omitempty"`
 	Artifacts    []ArtifactRef           `json:"artifacts,omitempty"`
 	Capabilities []capability.Capability `json:"capabilities,omitempty"`
+	Signature    *SignatureVerification  `json:"signature,omitempty"`
 }
 
 func InspectPath(path string) (ArtifactInspection, error) {
+	return InspectPathWithOptions(path, LoadOptions{})
+}
+
+func InspectPathWithOptions(path string, opts LoadOptions) (ArtifactInspection, error) {
 	if strings.TrimSpace(path) == "" {
 		return ArtifactInspection{}, fmt.Errorf("artifact path is required")
 	}
@@ -51,7 +56,7 @@ func InspectPath(path string) (ArtifactInspection, error) {
 		return ArtifactInspection{}, err
 	}
 	if info.IsDir() {
-		return inspectPackageDir(clean)
+		return inspectPackageDir(clean, opts)
 	}
 	kind := artifactKindForPath(clean)
 	switch kind {
@@ -68,7 +73,7 @@ func InspectPath(path string) (ArtifactInspection, error) {
 			Artifacts:   []ArtifactRef{ref},
 		}, nil
 	case ArtifactCapabilityManifest:
-		return inspectManifestFile(clean, nil)
+		return inspectManifestFile(clean, nil, opts)
 	case ArtifactBPFObject, ArtifactBPFSource, ArtifactGoBinding:
 		ref, err := artifactRef(clean, kind)
 		if err != nil {
@@ -89,13 +94,14 @@ func InspectPath(path string) (ArtifactInspection, error) {
 	}
 }
 
-func inspectPackageDir(dir string) (ArtifactInspection, error) {
+func inspectPackageDir(dir string, opts LoadOptions) (ArtifactInspection, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return ArtifactInspection{}, err
 	}
 	var artifacts []ArtifactRef
 	var caps []capability.Capability
+	var signature *SignatureVerification
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -104,12 +110,15 @@ func inspectPackageDir(dir string) (ArtifactInspection, error) {
 		kind := artifactKindForPath(path)
 		switch kind {
 		case ArtifactCapabilityManifest:
-			inspection, err := inspectManifestFile(path, nil)
+			inspection, err := inspectManifestFile(path, nil, opts)
 			if err != nil {
 				return ArtifactInspection{}, err
 			}
 			artifacts = append(artifacts, inspection.Artifacts...)
 			caps = append(caps, annotateCapabilities(inspection.Capabilities, dir, inspection.Artifacts)...)
+			if inspection.Signature != nil {
+				signature = inspection.Signature
+			}
 		case ArtifactHZNSource, ArtifactBPFObject, ArtifactBPFSource, ArtifactGoBinding:
 			ref, err := artifactRef(path, kind)
 			if err != nil {
@@ -131,15 +140,16 @@ func inspectPackageDir(dir string) (ArtifactInspection, error) {
 		Message:      "Horizon exported package inspected; Continuum registers declarations and records artifacts only",
 		Artifacts:    artifacts,
 		Capabilities: caps,
+		Signature:    signature,
 	}, nil
 }
 
-func inspectManifestFile(path string, packageArtifacts []ArtifactRef) (ArtifactInspection, error) {
+func inspectManifestFile(path string, packageArtifacts []ArtifactRef, opts LoadOptions) (ArtifactInspection, error) {
 	ref, err := artifactRef(path, ArtifactCapabilityManifest)
 	if err != nil {
 		return ArtifactInspection{}, err
 	}
-	manifest, err := LoadFile(path)
+	manifest, verification, err := LoadFileWithOptions(path, opts)
 	if err != nil {
 		return ArtifactInspection{}, err
 	}
@@ -147,15 +157,20 @@ func inspectManifestFile(path string, packageArtifacts []ArtifactRef) (ArtifactI
 	if err != nil {
 		return ArtifactInspection{}, err
 	}
+	caps = annotateSignature(caps, verification)
 	artifacts := append([]ArtifactRef{ref}, packageArtifacts...)
 	caps = annotateCapabilities(caps, filepath.Dir(path), artifacts)
-	return ArtifactInspection{
+	inspection := ArtifactInspection{
 		Path:         path,
 		Kind:         ArtifactCapabilityManifest,
 		Message:      "Horizon capability manifest inspected; Continuum registers declarations only",
 		Artifacts:    artifacts,
 		Capabilities: caps,
-	}, nil
+	}
+	if verification.Mode != SignatureOff || verification.Signed || verification.Verified || verification.Error != "" {
+		inspection.Signature = &verification
+	}
+	return inspection, nil
 }
 
 func annotateCapabilities(caps []capability.Capability, packageDir string, artifacts []ArtifactRef) []capability.Capability {

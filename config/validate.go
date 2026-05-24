@@ -27,6 +27,14 @@ func Validate(cfg Config) error {
 	if cfg.Grant.MaxTTL == "" {
 		return fmt.Errorf("grant.max_ttl is required")
 	}
+	switch cfg.Capabilities.ManifestSignatureMode {
+	case "", "off", "warn", "require":
+	default:
+		return fmt.Errorf("capabilities.manifest_signature_mode %q is not supported", cfg.Capabilities.ManifestSignatureMode)
+	}
+	if cfg.Capabilities.ManifestSignatureMode == "require" && cfg.Capabilities.ManifestSignaturePublicKeys == "" {
+		return fmt.Errorf("capabilities.manifest_signature_public_keys is required when manifest_signature_mode is require")
+	}
 	maxTTL, err := time.ParseDuration(cfg.Grant.MaxTTL)
 	if err != nil {
 		return fmt.Errorf("grant.max_ttl %q is invalid: %w", cfg.Grant.MaxTTL, err)

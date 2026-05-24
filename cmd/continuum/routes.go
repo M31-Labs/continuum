@@ -8,8 +8,8 @@ import (
 	cruntime "m31labs.dev/continuum/runtime"
 )
 
-func loadCapabilityRegistry(ctx context.Context, manifestDir string) (*capability.Registry, error) {
-	daemon := cruntime.NewDaemon(horizon.DirProvider{Dir: manifestDir})
+func loadCapabilityRegistryWithProvider(ctx context.Context, provider horizon.Provider) (*capability.Registry, error) {
+	daemon := cruntime.NewDaemon(provider)
 	if err := daemon.Start(ctx); err != nil {
 		return nil, err
 	}

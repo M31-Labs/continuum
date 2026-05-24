@@ -14,7 +14,6 @@ import (
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/config"
-	"m31labs.dev/continuum/horizon"
 	"m31labs.dev/continuum/policy"
 	cruntime "m31labs.dev/continuum/runtime"
 )
@@ -132,9 +131,9 @@ func buildDoctorReport(opts doctorOptions) doctorReport {
 	if err != nil {
 		report.add(doctorFail, "policy bundle", fmt.Sprintf("cannot resolve policy bundle: %v", err), "")
 	} else {
-		report.checkPolicy(policyPath, cfg.Capabilities.HorizonManifestDir)
+		report.checkPolicy(policyPath, cfg)
 	}
-	report.checkCapabilities(cfg.Capabilities.HorizonManifestDir)
+	report.checkCapabilities(cfg)
 
 	seenParents := map[string]bool{}
 	report.checkPolicyStore(policyStorePath, seenParents)
@@ -149,7 +148,7 @@ func buildDoctorReport(opts doctorOptions) doctorReport {
 	return report
 }
 
-func (r *doctorReport) checkPolicy(path, manifestDir string) {
+func (r *doctorReport) checkPolicy(path string, cfg config.Config) {
 	if path == "" {
 		r.add(doctorFail, "policy bundle", "policy bundle path is required", "")
 		return
@@ -170,9 +169,14 @@ func (r *doctorReport) checkPolicy(path, manifestDir string) {
 		return
 	}
 	r.add(doctorOK, "policy inputs", fmt.Sprintf("validated fields=%d", len(inputs.Fields)), path)
-	registry, err := loadCapabilityRegistry(context.Background(), manifestDir)
+	provider, err := horizonProviderFromConfig(cfg)
 	if err != nil {
-		r.add(doctorFail, "policy routes", fmt.Sprintf("capability load failed: %v", err), manifestDir)
+		r.add(doctorFail, "policy routes", fmt.Sprintf("capability signature config failed: %v", err), cfg.Capabilities.HorizonManifestDir)
+		return
+	}
+	registry, err := loadCapabilityRegistryWithProvider(context.Background(), provider)
+	if err != nil {
+		r.add(doctorFail, "policy routes", fmt.Sprintf("capability load failed: %v", err), cfg.Capabilities.HorizonManifestDir)
 		return
 	}
 	routes, err := cruntime.ValidateOutcomeRoutes(bundle, registry)
@@ -183,7 +187,8 @@ func (r *doctorReport) checkPolicy(path, manifestDir string) {
 	r.add(doctorOK, "policy routes", fmt.Sprintf("validated routes=%d", len(routes.Routes)), path)
 }
 
-func (r *doctorReport) checkCapabilities(manifestDir string) {
+func (r *doctorReport) checkCapabilities(cfg config.Config) {
+	manifestDir := cfg.Capabilities.HorizonManifestDir
 	if manifestDir == "" {
 		r.add(doctorWarn, "capabilities", "Horizon manifest directory is empty; only built-ins will be registered", "")
 		return
@@ -199,7 +204,12 @@ func (r *doctorReport) checkCapabilities(manifestDir string) {
 		r.add(doctorFail, "capabilities", "Horizon manifest path is not a directory", manifestDir)
 		return
 	}
-	daemon := cruntime.NewDaemon(horizon.DirProvider{Dir: manifestDir})
+	provider, err := horizonProviderFromConfig(cfg)
+	if err != nil {
+		r.add(doctorFail, "capabilities", fmt.Sprintf("capability signature config failed: %v", err), manifestDir)
+		return
+	}
+	daemon := cruntime.NewDaemon(provider)
 	if err := daemon.Start(context.Background()); err != nil {
 		r.add(doctorFail, "capabilities", fmt.Sprintf("capability load failed: %v", err), manifestDir)
 		return

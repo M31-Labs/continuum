@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"m31labs.dev/continuum/config"
-	"m31labs.dev/continuum/horizon"
 	cruntime "m31labs.dev/continuum/runtime"
 )
 
@@ -35,7 +34,12 @@ func main() {
 	if *corsOrigins != "" {
 		allowedOrigins = splitCSV(*corsOrigins)
 	}
-	daemon := cruntime.NewDaemon(horizon.DirProvider{Dir: cfg.Capabilities.HorizonManifestDir})
+	provider, err := horizonProviderFromConfig(cfg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "continuum-agent:", err)
+		os.Exit(1)
+	}
+	daemon := cruntime.NewDaemon(provider)
 	if err := daemon.Start(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "continuum-agent:", err)
 		os.Exit(1)

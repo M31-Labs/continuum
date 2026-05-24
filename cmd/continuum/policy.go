@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"m31labs.dev/continuum/arbiterx"
+	"m31labs.dev/continuum/config"
 	"m31labs.dev/continuum/policy"
 	cruntime "m31labs.dev/continuum/runtime"
 )
@@ -39,7 +40,7 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		report, err := validatePolicy(context.Background(), bundle, cfg.Config.Capabilities.HorizonManifestDir)
+		report, err := validatePolicy(context.Background(), bundle, cfg.Config)
 		if err != nil {
 			return err
 		}
@@ -66,7 +67,7 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		report, err := validatePolicy(context.Background(), bundle, cfg.Config.Capabilities.HorizonManifestDir)
+		report, err := validatePolicy(context.Background(), bundle, cfg.Config)
 		if err != nil {
 			return err
 		}
@@ -208,7 +209,7 @@ type policyValidationReport struct {
 	Routes cruntime.OutcomeRouteReport
 }
 
-func validatePolicy(ctx context.Context, bundle policy.Bundle, manifestDir string) (policyValidationReport, error) {
+func validatePolicy(ctx context.Context, bundle policy.Bundle, cfg config.Config) (policyValidationReport, error) {
 	if err := bundle.Validate(); err != nil {
 		return policyValidationReport{}, err
 	}
@@ -216,7 +217,11 @@ func validatePolicy(ctx context.Context, bundle policy.Bundle, manifestDir strin
 	if err != nil {
 		return policyValidationReport{}, err
 	}
-	registry, err := loadCapabilityRegistry(ctx, manifestDir)
+	provider, err := horizonProviderFromConfig(cfg)
+	if err != nil {
+		return policyValidationReport{}, err
+	}
+	registry, err := loadCapabilityRegistryWithProvider(ctx, provider)
 	if err != nil {
 		return policyValidationReport{}, err
 	}

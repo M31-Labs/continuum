@@ -16,9 +16,10 @@ type Provider interface {
 }
 
 type DirProvider struct {
-	Dir string
+	Dir     string
+	Options LoadOptions
 }
 
 func (p DirProvider) LoadCapabilities(context.Context) ([]capability.Capability, error) {
-	return LoadDir(p.Dir)
+	return LoadDirWithOptions(p.Dir, p.Options)
 }

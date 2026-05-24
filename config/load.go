@@ -125,10 +125,16 @@ func assign(cfg *Config, section, key, value string) error {
 			return unknown(section, key)
 		}
 	case "capabilities":
-		if key != "horizon_manifest_dir" {
+		switch key {
+		case "horizon_manifest_dir":
+			cfg.Capabilities.HorizonManifestDir = value
+		case "manifest_signature_mode":
+			cfg.Capabilities.ManifestSignatureMode = value
+		case "manifest_signature_public_keys":
+			cfg.Capabilities.ManifestSignaturePublicKeys = value
+		default:
 			return unknown(section, key)
 		}
-		cfg.Capabilities.HorizonManifestDir = value
 	case "state":
 		switch key {
 		case "policy_store":

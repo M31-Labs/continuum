@@ -79,6 +79,26 @@ func TestLoadGrantConfig(t *testing.T) {
 	}
 }
 
+func TestLoadCapabilitySignatureConfig(t *testing.T) {
+	cfg, err := LoadBytes([]byte("[capabilities]\nhorizon_manifest_dir = \"caps\"\nmanifest_signature_mode = \"warn\"\nmanifest_signature_public_keys = \"keys/a.pub,keys/b.pub\"\n"))
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if cfg.Capabilities.ManifestSignatureMode != "warn" {
+		t.Fatalf("signature mode = %q", cfg.Capabilities.ManifestSignatureMode)
+	}
+	if cfg.Capabilities.ManifestSignaturePublicKeys != "keys/a.pub,keys/b.pub" {
+		t.Fatalf("signature keys = %q", cfg.Capabilities.ManifestSignaturePublicKeys)
+	}
+}
+
+func TestLoadRejectsRequireSignatureWithoutKeys(t *testing.T) {
+	_, err := LoadBytes([]byte("[capabilities]\nmanifest_signature_mode = \"require\"\n"))
+	if err == nil {
+		t.Fatal("expected require signature without keys error")
+	}
+}
+
 func TestLoadRejectsInvalidGrantTTL(t *testing.T) {
 	_, err := LoadBytes([]byte("[grant]\nmax_ttl = \"0s\"\n"))
 	if err == nil {
@@ -103,5 +123,11 @@ func TestResolvePathsRelativeToConfig(t *testing.T) {
 	}
 	if resolved.State.IDStore != filepath.Join("examples", "agent-workdir", ".continuum", "ids.json") {
 		t.Fatalf("id store = %q", resolved.State.IDStore)
+	}
+	cfg.Capabilities.ManifestSignaturePublicKeys = "keys/a.pub,/etc/continuum/b.pub"
+	resolved = Resolve(cfg, filepath.Join("examples", "agent-workdir", "continuum.toml"))
+	wantKeys := filepath.Join("examples", "agent-workdir", "keys", "a.pub") + ",/etc/continuum/b.pub"
+	if resolved.Capabilities.ManifestSignaturePublicKeys != wantKeys {
+		t.Fatalf("signature keys = %q", resolved.Capabilities.ManifestSignaturePublicKeys)
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"m31labs.dev/continuum/config"
-	"m31labs.dev/continuum/horizon"
 	cruntime "m31labs.dev/continuum/runtime"
 )
 
@@ -44,7 +43,11 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		daemon := cruntime.NewDaemon(horizon.DirProvider{Dir: cfg.Capabilities.HorizonManifestDir})
+		provider, err := horizonProviderFromConfig(cfg)
+		if err != nil {
+			return err
+		}
+		daemon := cruntime.NewDaemon(provider)
 		if err := daemon.Start(ctx); err != nil {
 			return err
 		}

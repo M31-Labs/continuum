@@ -13,7 +13,6 @@ import (
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/config"
-	"m31labs.dev/continuum/horizon"
 	"m31labs.dev/continuum/policy"
 	cruntime "m31labs.dev/continuum/runtime"
 )
@@ -90,7 +89,11 @@ func loadStatusSnapshot(configPath, policyStorePath, grantStorePath, deliverySto
 	sessionStorePath = resolveSessionStorePath(sessionStorePath, cliCfg)
 	idStorePath = resolveIDStorePath(idStorePath, cliCfg)
 	auditPath = resolveAuditPath(auditPath, false, cliCfg)
-	daemon := cruntime.NewDaemon(horizon.DirProvider{Dir: cfg.Capabilities.HorizonManifestDir})
+	provider, err := horizonProviderFromConfig(cfg)
+	if err != nil {
+		return statusSnapshot{}, err
+	}
+	daemon := cruntime.NewDaemon(provider)
 	if err := daemon.Start(context.Background()); err != nil {
 		return statusSnapshot{}, err
 	}

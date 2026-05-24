@@ -11,6 +11,7 @@ import (
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
+	"m31labs.dev/continuum/horizon"
 	cruntime "m31labs.dev/continuum/runtime"
 )
 
@@ -63,6 +64,13 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	if *manifestDir == "" && cfg.ConfigPath != "<default>" {
 		*manifestDir = cfg.Config.Capabilities.HorizonManifestDir
 	}
+	loadOptions := horizon.LoadOptions{}
+	if cfg.ConfigPath != "<default>" {
+		loadOptions, err = horizonLoadOptionsFromConfig(cfg.Config)
+		if err != nil {
+			return err
+		}
+	}
 	if *daemonURL != "" {
 		data, err := os.ReadFile(*eventsPath)
 		if err != nil {
@@ -101,7 +109,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	events, err := loadEventsWithHorizon(*eventsPath, *manifestDir)
+	events, err := loadEventsWithHorizonOptions(*eventsPath, *manifestDir, loadOptions)
 	if err != nil {
 		return err
 	}

@@ -121,6 +121,11 @@ bundle = "policies/main.arb"
 kind = "jsonl"
 path = ".continuum/audit.jsonl"
 
+[capabilities]
+horizon_manifest_dir = ".continuum/capabilities"
+manifest_signature_mode = "off"
+manifest_signature_public_keys = ""
+
 [state]
 policy_store = ".continuum/policies.json"
 grant_store = ".continuum/grants.json"
@@ -170,6 +175,17 @@ Continuum adapts each Horizon capability declaration into a registered
 Continuum capability while preserving program, section, emitted event type, and
 map access metadata. Horizon remains responsible for producing and running the
 probe artifacts.
+
+Manifest signature verification is optional by default and can be set to
+`warn` or `require` for production intake. Continuum verifies detached Ed25519
+sidecars named `<manifest>.sig` over the exact `.cap.json` bytes:
+
+```toml
+[capabilities]
+horizon_manifest_dir = ".continuum/capabilities"
+manifest_signature_mode = "require"
+manifest_signature_public_keys = "/etc/continuum/horizon.pub"
+```
 
 `continuum capabilities inspect <path>` recognizes `.hzn` source, `.cap.json`
 manifests, exported package directories, and compiled `.bpf.o` artifact

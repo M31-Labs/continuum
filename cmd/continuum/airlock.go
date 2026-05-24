@@ -13,6 +13,7 @@ import (
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/event"
+	"m31labs.dev/continuum/horizon"
 	cruntime "m31labs.dev/continuum/runtime"
 	"m31labs.dev/continuum/subject"
 )
@@ -394,7 +395,14 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		if *manifestDir == "" && cfg.ConfigPath != "<default>" {
 			*manifestDir = cfg.Config.Capabilities.HorizonManifestDir
 		}
-		events, err := loadEventsWithHorizon(*eventsPath, *manifestDir)
+		loadOptions := horizon.LoadOptions{}
+		if cfg.ConfigPath != "<default>" {
+			loadOptions, err = horizonLoadOptionsFromConfig(cfg.Config)
+			if err != nil {
+				return err
+			}
+		}
+		events, err := loadEventsWithHorizonOptions(*eventsPath, *manifestDir, loadOptions)
 		if err != nil {
 			return err
 		}
