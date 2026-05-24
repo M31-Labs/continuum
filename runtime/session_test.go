@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -48,6 +49,28 @@ func TestSessionStorePersistsAndFinishes(t *testing.T) {
 	tree := reloaded.Sessions[0].ProcessTree
 	if tree == nil || len(tree.Processes) != 1 || tree.Processes[0].State != ProcessExited {
 		t.Fatalf("process tree = %+v", tree)
+	}
+}
+
+func TestSessionStoreSchemaMigration(t *testing.T) {
+	dir := t.TempDir()
+	legacyPath := filepath.Join(dir, "legacy-sessions.json")
+	if err := os.WriteFile(legacyPath, []byte(`{"sessions":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := LoadSessionStore(legacyPath)
+	if err != nil {
+		t.Fatalf("LoadSessionStore legacy: %v", err)
+	}
+	if legacy.SchemaVersion != SessionStoreSchemaVersion {
+		t.Fatalf("legacy schema version = %d", legacy.SchemaVersion)
+	}
+	futurePath := filepath.Join(dir, "future-sessions.json")
+	if err := os.WriteFile(futurePath, []byte(`{"schema_version":99,"sessions":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSessionStore(futurePath); err == nil {
+		t.Fatal("future session store schema loaded without error")
 	}
 }
 

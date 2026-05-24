@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -57,6 +58,28 @@ func TestGrantStorePersistsAndFilters(t *testing.T) {
 	}
 	if removed := reloaded.PruneExpired(now); removed != 1 {
 		t.Fatalf("removed = %d", removed)
+	}
+}
+
+func TestGrantStoreSchemaMigration(t *testing.T) {
+	dir := t.TempDir()
+	legacyPath := filepath.Join(dir, "legacy-grants.json")
+	if err := os.WriteFile(legacyPath, []byte(`{"grants":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := LoadGrantStore(legacyPath)
+	if err != nil {
+		t.Fatalf("LoadGrantStore legacy: %v", err)
+	}
+	if legacy.SchemaVersion != GrantStoreSchemaVersion {
+		t.Fatalf("legacy schema version = %d", legacy.SchemaVersion)
+	}
+	futurePath := filepath.Join(dir, "future-grants.json")
+	if err := os.WriteFile(futurePath, []byte(`{"schema_version":99,"grants":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadGrantStore(futurePath); err == nil {
+		t.Fatal("future grant store schema loaded without error")
 	}
 }
 

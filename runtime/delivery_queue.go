@@ -20,6 +20,8 @@ const (
 	DeliveryFailed    DeliveryStatus = "failed"
 )
 
+const DeliveryStoreSchemaVersion = 1
+
 type DeliveryItem struct {
 	ID          string                  `json:"id"`
 	AuditID     string                  `json:"audit_id"`
@@ -34,14 +36,18 @@ type DeliveryItem struct {
 }
 
 type DeliveryStore struct {
-	mu    sync.Mutex
-	Path  string         `json:"-"`
-	Items []DeliveryItem `json:"items"`
+	mu            sync.Mutex
+	Path          string         `json:"-"`
+	SchemaVersion int            `json:"schema_version"`
+	Items         []DeliveryItem `json:"items"`
 }
 
 func LoadDeliveryStore(path string) (*DeliveryStore, error) {
-	store := &DeliveryStore{Path: path}
+	store := &DeliveryStore{Path: path, SchemaVersion: DeliveryStoreSchemaVersion}
 	if _, err := statefile.ReadJSON(path, store); err != nil {
+		return nil, fmt.Errorf("load delivery store %s: %w", path, err)
+	}
+	if err := store.MigrateSchema(); err != nil {
 		return nil, fmt.Errorf("load delivery store %s: %w", path, err)
 	}
 	store.Path = path
@@ -51,6 +57,9 @@ func LoadDeliveryStore(path string) (*DeliveryStore, error) {
 func (s *DeliveryStore) Save() error {
 	if s == nil {
 		return fmt.Errorf("nil delivery store")
+	}
+	if err := s.MigrateSchema(); err != nil {
+		return err
 	}
 	return statefile.WriteJSON(s.Path, s)
 }
@@ -67,8 +76,18 @@ func UpdateDeliveryStore(path string, mutate func(*DeliveryStore) error) error {
 		if err := mutate(store); err != nil {
 			return err
 		}
+		if err := store.MigrateSchema(); err != nil {
+			return err
+		}
 		return statefile.WriteJSONWithoutLock(path, store)
 	})
+}
+
+func (s *DeliveryStore) MigrateSchema() error {
+	if s == nil {
+		return fmt.Errorf("nil delivery store")
+	}
+	return statefile.MigrateSchema("delivery store", &s.SchemaVersion, DeliveryStoreSchemaVersion, nil)
 }
 
 func (s *DeliveryStore) Enqueue(item DeliveryItem) (DeliveryItem, error) {

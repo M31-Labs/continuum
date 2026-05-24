@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -48,6 +49,28 @@ func TestDeliveryStorePersistsAttempts(t *testing.T) {
 	}
 	if got := reloaded.ByStatus(DeliveryDelivered); len(got) != 1 || len(got[0].Attempts) != 1 {
 		t.Fatalf("delivered = %+v", got)
+	}
+}
+
+func TestDeliveryStoreSchemaMigration(t *testing.T) {
+	dir := t.TempDir()
+	legacyPath := filepath.Join(dir, "legacy-deliveries.json")
+	if err := os.WriteFile(legacyPath, []byte(`{"items":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := LoadDeliveryStore(legacyPath)
+	if err != nil {
+		t.Fatalf("LoadDeliveryStore legacy: %v", err)
+	}
+	if legacy.SchemaVersion != DeliveryStoreSchemaVersion {
+		t.Fatalf("legacy schema version = %d", legacy.SchemaVersion)
+	}
+	futurePath := filepath.Join(dir, "future-deliveries.json")
+	if err := os.WriteFile(futurePath, []byte(`{"schema_version":99,"items":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadDeliveryStore(futurePath); err == nil {
+		t.Fatal("future delivery store schema loaded without error")
 	}
 }
 

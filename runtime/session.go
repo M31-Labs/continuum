@@ -20,6 +20,8 @@ const (
 	SessionStale   SessionState = "stale"
 )
 
+const SessionStoreSchemaVersion = 1
+
 type Session struct {
 	ID              string          `json:"id"`
 	Subject         subject.Subject `json:"subject"`
@@ -35,12 +37,16 @@ type Session struct {
 }
 
 type SessionStore struct {
-	Sessions []Session `json:"sessions,omitempty"`
+	SchemaVersion int       `json:"schema_version"`
+	Sessions      []Session `json:"sessions,omitempty"`
 }
 
 func LoadSessionStore(path string) (*SessionStore, error) {
-	store := &SessionStore{}
+	store := &SessionStore{SchemaVersion: SessionStoreSchemaVersion}
 	if _, err := statefile.ReadJSON(path, store); err != nil {
+		return nil, fmt.Errorf("load session store %s: %w", path, err)
+	}
+	if err := store.MigrateSchema(); err != nil {
 		return nil, fmt.Errorf("load session store %s: %w", path, err)
 	}
 	return store, nil
@@ -49,6 +55,9 @@ func LoadSessionStore(path string) (*SessionStore, error) {
 func (s *SessionStore) Save(path string) error {
 	if s == nil {
 		return fmt.Errorf("nil session store")
+	}
+	if err := s.MigrateSchema(); err != nil {
+		return err
 	}
 	return statefile.WriteJSON(path, s)
 }
@@ -65,8 +74,18 @@ func UpdateSessionStore(path string, mutate func(*SessionStore) error) error {
 		if err := mutate(store); err != nil {
 			return err
 		}
+		if err := store.MigrateSchema(); err != nil {
+			return err
+		}
 		return statefile.WriteJSONWithoutLock(path, store)
 	})
+}
+
+func (s *SessionStore) MigrateSchema() error {
+	if s == nil {
+		return fmt.Errorf("nil session store")
+	}
+	return statefile.MigrateSchema("session store", &s.SchemaVersion, SessionStoreSchemaVersion, nil)
 }
 
 func (s *SessionStore) Upsert(session Session) {

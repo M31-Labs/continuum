@@ -9,7 +9,10 @@ import (
 	"m31labs.dev/continuum/internal/statefile"
 )
 
+const StoreSchemaVersion = 1
+
 type Store struct {
+	SchemaVersion     int                     `json:"schema_version"`
 	Path              string                  `json:"-"`
 	Active            string                  `json:"active,omitempty"`
 	Bundles           map[string]StoredBundle `json:"bundles,omitempty"`
@@ -39,8 +42,11 @@ type ActivationRecord struct {
 }
 
 func LoadStore(path string) (*Store, error) {
-	store := &Store{Path: path, Bundles: map[string]StoredBundle{}}
+	store := &Store{SchemaVersion: StoreSchemaVersion, Path: path, Bundles: map[string]StoredBundle{}}
 	if _, err := statefile.ReadJSON(path, store); err != nil {
+		return nil, fmt.Errorf("load policy store %s: %w", path, err)
+	}
+	if err := store.MigrateSchema(); err != nil {
 		return nil, fmt.Errorf("load policy store %s: %w", path, err)
 	}
 	store.Path = path
@@ -53,6 +59,9 @@ func LoadStore(path string) (*Store, error) {
 func (s *Store) Save() error {
 	if s == nil {
 		return fmt.Errorf("nil policy store")
+	}
+	if err := s.MigrateSchema(); err != nil {
+		return err
 	}
 	return statefile.WriteJSON(s.Path, s)
 }
@@ -69,8 +78,18 @@ func UpdateStore(path string, mutate func(*Store) error) error {
 		if err := mutate(store); err != nil {
 			return err
 		}
+		if err := store.MigrateSchema(); err != nil {
+			return err
+		}
 		return statefile.WriteJSONWithoutLock(path, store)
 	})
+}
+
+func (s *Store) MigrateSchema() error {
+	if s == nil {
+		return fmt.Errorf("nil policy store")
+	}
+	return statefile.MigrateSchema("policy store", &s.SchemaVersion, StoreSchemaVersion, nil)
 }
 
 func (s *Store) Publish(bundle Bundle, now time.Time) error {

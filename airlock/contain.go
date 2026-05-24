@@ -1,6 +1,8 @@
 package airlock
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"sync"
@@ -10,22 +12,34 @@ import (
 	"m31labs.dev/continuum/subject"
 )
 
+const StoreSchemaVersion = 1
+
 type Store struct {
-	mu       sync.Mutex
-	sessions map[string]Session
+	mu            sync.Mutex
+	SchemaVersion int
+	sessions      map[string]Session
+}
+
+type storeFile struct {
+	SchemaVersion int       `json:"schema_version"`
+	Sessions      []Session `json:"sessions,omitempty"`
 }
 
 func NewStore() *Store {
-	return &Store{sessions: map[string]Session{}}
+	return &Store{SchemaVersion: StoreSchemaVersion, sessions: map[string]Session{}}
 }
 
 func LoadStore(path string) (*Store, error) {
 	store := NewStore()
-	var sessions []Session
-	if _, err := statefile.ReadJSON(path, &sessions); err != nil {
+	file := storeFile{SchemaVersion: StoreSchemaVersion}
+	if _, err := statefile.ReadJSON(path, &file); err != nil {
 		return nil, fmt.Errorf("load airlock store %s: %w", path, err)
 	}
-	for _, session := range sessions {
+	store.SchemaVersion = file.SchemaVersion
+	if err := store.MigrateSchema(); err != nil {
+		return nil, fmt.Errorf("load airlock store %s: %w", path, err)
+	}
+	for _, session := range file.Sessions {
 		store.sessions[session.ID] = session
 	}
 	return store, nil
@@ -35,7 +49,10 @@ func (s *Store) Save(path string) error {
 	if s == nil {
 		return fmt.Errorf("nil airlock store")
 	}
-	return statefile.WriteJSON(path, s.List())
+	if err := s.MigrateSchema(); err != nil {
+		return err
+	}
+	return statefile.WriteJSON(path, s.file())
 }
 
 func UpdateStore(path string, mutate func(*Store) error) error {
@@ -50,8 +67,48 @@ func UpdateStore(path string, mutate func(*Store) error) error {
 		if err := mutate(store); err != nil {
 			return err
 		}
-		return statefile.WriteJSONWithoutLock(path, store.List())
+		if err := store.MigrateSchema(); err != nil {
+			return err
+		}
+		return statefile.WriteJSONWithoutLock(path, store.file())
 	})
+}
+
+func (s *Store) MigrateSchema() error {
+	if s == nil {
+		return fmt.Errorf("nil airlock store")
+	}
+	return statefile.MigrateSchema("airlock store", &s.SchemaVersion, StoreSchemaVersion, nil)
+}
+
+func (s *Store) file() storeFile {
+	if s == nil {
+		return storeFile{SchemaVersion: StoreSchemaVersion}
+	}
+	return storeFile{SchemaVersion: s.SchemaVersion, Sessions: s.List()}
+}
+
+func (f *storeFile) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil
+	}
+	if trimmed[0] == '[' {
+		var sessions []Session
+		if err := json.Unmarshal(trimmed, &sessions); err != nil {
+			return err
+		}
+		f.SchemaVersion = 0
+		f.Sessions = sessions
+		return nil
+	}
+	type fileAlias storeFile
+	var decoded fileAlias
+	if err := json.Unmarshal(trimmed, &decoded); err != nil {
+		return err
+	}
+	*f = storeFile(decoded)
+	return nil
 }
 
 func (s *Store) Enter(id string, subj subject.Subject, reason string, now time.Time) (Session, error) {

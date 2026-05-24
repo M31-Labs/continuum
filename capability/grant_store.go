@@ -9,13 +9,19 @@ import (
 	"m31labs.dev/continuum/internal/statefile"
 )
 
+const GrantStoreSchemaVersion = 1
+
 type GrantStore struct {
-	Grants []Grant `json:"grants,omitempty"`
+	SchemaVersion int     `json:"schema_version"`
+	Grants        []Grant `json:"grants,omitempty"`
 }
 
 func LoadGrantStore(path string) (*GrantStore, error) {
-	store := &GrantStore{}
+	store := &GrantStore{SchemaVersion: GrantStoreSchemaVersion}
 	if _, err := statefile.ReadJSON(path, store); err != nil {
+		return nil, fmt.Errorf("load grant store %s: %w", path, err)
+	}
+	if err := store.MigrateSchema(); err != nil {
 		return nil, fmt.Errorf("load grant store %s: %w", path, err)
 	}
 	return store, nil
@@ -24,6 +30,9 @@ func LoadGrantStore(path string) (*GrantStore, error) {
 func (s *GrantStore) Save(path string) error {
 	if s == nil {
 		return fmt.Errorf("nil grant store")
+	}
+	if err := s.MigrateSchema(); err != nil {
+		return err
 	}
 	return statefile.WriteJSON(path, s)
 }
@@ -40,8 +49,18 @@ func UpdateGrantStore(path string, mutate func(*GrantStore) error) error {
 		if err := mutate(store); err != nil {
 			return err
 		}
+		if err := store.MigrateSchema(); err != nil {
+			return err
+		}
 		return statefile.WriteJSONWithoutLock(path, store)
 	})
+}
+
+func (s *GrantStore) MigrateSchema() error {
+	if s == nil {
+		return fmt.Errorf("nil grant store")
+	}
+	return statefile.MigrateSchema("grant store", &s.SchemaVersion, GrantStoreSchemaVersion, nil)
 }
 
 func (s *GrantStore) Add(grant Grant) error {

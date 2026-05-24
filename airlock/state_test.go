@@ -1,6 +1,7 @@
 package airlock
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -56,5 +57,30 @@ func TestStorePersistsSessions(t *testing.T) {
 	list := reloaded.List()
 	if len(list) != 1 || list[0].ID != "airlock-1" {
 		t.Fatalf("reloaded = %+v", list)
+	}
+	if reloaded.SchemaVersion != StoreSchemaVersion {
+		t.Fatalf("schema version = %d", reloaded.SchemaVersion)
+	}
+}
+
+func TestStoreSchemaMigration(t *testing.T) {
+	dir := t.TempDir()
+	legacyPath := filepath.Join(dir, "legacy-airlock.json")
+	if err := os.WriteFile(legacyPath, []byte(`[{"id":"airlock-1","state":"airlocked"}]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := LoadStore(legacyPath)
+	if err != nil {
+		t.Fatalf("LoadStore legacy: %v", err)
+	}
+	if legacy.SchemaVersion != StoreSchemaVersion || len(legacy.List()) != 1 {
+		t.Fatalf("legacy store version=%d sessions=%+v", legacy.SchemaVersion, legacy.List())
+	}
+	futurePath := filepath.Join(dir, "future-airlock.json")
+	if err := os.WriteFile(futurePath, []byte(`{"schema_version":99,"sessions":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadStore(futurePath); err == nil {
+		t.Fatal("future airlock store schema loaded without error")
 	}
 }

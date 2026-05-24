@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -36,6 +37,28 @@ func TestStorePublishActivateAndReload(t *testing.T) {
 	}
 	if active.Provenance.SourceSHA256 == "" || active.Provenance.SourceBytes == 0 || active.Provenance.Compiler == "" {
 		t.Fatalf("missing provenance: %+v", active.Provenance)
+	}
+}
+
+func TestStoreSchemaMigration(t *testing.T) {
+	dir := t.TempDir()
+	legacyPath := filepath.Join(dir, "legacy-policies.json")
+	if err := os.WriteFile(legacyPath, []byte(`{"bundles":{}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := LoadStore(legacyPath)
+	if err != nil {
+		t.Fatalf("LoadStore legacy: %v", err)
+	}
+	if legacy.SchemaVersion != StoreSchemaVersion {
+		t.Fatalf("legacy schema version = %d", legacy.SchemaVersion)
+	}
+	futurePath := filepath.Join(dir, "future-policies.json")
+	if err := os.WriteFile(futurePath, []byte(`{"schema_version":99,"bundles":{}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadStore(futurePath); err == nil {
+		t.Fatal("future policy store schema loaded without error")
 	}
 }
 
