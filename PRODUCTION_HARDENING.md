@@ -49,7 +49,7 @@ enforcement backends exist and are reviewed.
 - [ ] Add policy activation rollback.
 - [ ] Add signed capability manifest support.
 - [ ] Add capability manifest digest pinning in config.
-- [ ] Add warning output for privileged/destructive capabilities.
+- [x] Add warning output for privileged/destructive capabilities.
 - [ ] Add route tests for every built-in outcome.
 - [ ] Add replay gates that compare candidate policy decisions against baseline.
 

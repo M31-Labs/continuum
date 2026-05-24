@@ -40,7 +40,11 @@ func runCapabilities(args []string, stdout, stderr io.Writer) error {
 	for _, cap := range caps {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", cap.Name, cap.Kind, cap.Owner, cap.Danger, cap.Backend)
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	warnDangerousCapabilities(stdout, caps)
+	return nil
 }
 
 func runCapabilitiesInspect(args []string, stdout, stderr io.Writer) error {
@@ -86,4 +90,21 @@ func filterCapabilities(caps []capability.Capability, kind capability.Kind) []ca
 		}
 	}
 	return out
+}
+
+func warnDangerousCapabilities(stdout io.Writer, caps []capability.Capability) {
+	var dangerous []capability.Capability
+	for _, cap := range caps {
+		if cap.Danger == capability.DangerPrivileged || cap.Danger == capability.DangerDestructive {
+			dangerous = append(dangerous, cap)
+		}
+	}
+	if len(dangerous) == 0 {
+		return
+	}
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "WARNING: privileged/destructive capabilities are registered:")
+	for _, cap := range dangerous {
+		fmt.Fprintf(stdout, "- %s danger=%s backend=%s\n", cap.Name, cap.Danger, cap.Backend)
+	}
 }

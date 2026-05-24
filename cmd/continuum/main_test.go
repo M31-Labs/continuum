@@ -192,6 +192,17 @@ func TestCapabilitiesCommandJSON(t *testing.T) {
 	}
 }
 
+func TestCapabilitiesCommandWarnsForDangerousCapabilities(t *testing.T) {
+	var out, errOut bytes.Buffer
+	err := run([]string{"capabilities", "--kind", "worker"}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("capabilities: %v", err)
+	}
+	if !strings.Contains(out.String(), "WARNING: privileged/destructive capabilities") || !strings.Contains(out.String(), "kernel.process.kill") {
+		t.Fatalf("danger warning output = %q", out.String())
+	}
+}
+
 func TestCapabilitiesInspectHorizonArtifacts(t *testing.T) {
 	var out, errOut bytes.Buffer
 	err := run([]string{"capabilities", "inspect", "--json", "../../testdata/horizon-export"}, &out, &errOut)
