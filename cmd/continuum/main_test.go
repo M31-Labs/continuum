@@ -45,6 +45,97 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
+func TestDoctorCommandReportsConfigAndPaths(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "continuum.toml")
+	manifestDir := filepath.Join(dir, "capabilities")
+	if err := os.MkdirAll(manifestDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	policyPath, err := filepath.Abs("../../examples/agent-workdir/policies/main.arb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	configText := `[project]
+name = "doctor-test"
+version = "0.1.0"
+
+[policy]
+bundle = "` + policyPath + `"
+
+[audit]
+kind = "jsonl"
+path = "state/audit.jsonl"
+
+[subject]
+default_kind = "agent"
+default_mode = "ask"
+
+[capabilities]
+horizon_manifest_dir = "capabilities"
+
+[state]
+policy_store = "state/policies.json"
+grant_store = "state/grants.json"
+delivery_store = "state/deliveries.json"
+session_store = "state/sessions.json"
+airlock_store = "state/airlock.json"
+
+[enforcement]
+network = "observe"
+file = "observe"
+process = "observe"
+
+[approval]
+kind = "cli"
+`
+	if err := os.WriteFile(configPath, []byte(configText), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if err := run([]string{"doctor", "--config", configPath}, &out, &errOut); err != nil {
+		t.Fatalf("doctor: %v\noutput=%s", err, out.String())
+	}
+	for _, want := range []string{"continuum doctor: ok", "policy bundle", "capabilities", "warnings="} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("doctor output missing %q: %s", want, out.String())
+		}
+	}
+	out.Reset()
+	if err := run([]string{"doctor", "--config", configPath, "--json"}, &out, &errOut); err != nil {
+		t.Fatalf("doctor json: %v", err)
+	}
+	var report doctorReport
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("decode doctor json: %v\n%s", err, out.String())
+	}
+	if !report.OK || report.Project != "doctor-test" {
+		t.Fatalf("doctor json report = %+v", report)
+	}
+}
+
+func TestDoctorCommandFailsMissingPolicy(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "continuum.toml")
+	configText := `[project]
+name = "doctor-missing-policy"
+
+[policy]
+bundle = "missing.arb"
+`
+	if err := os.WriteFile(configPath, []byte(configText), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	err := run([]string{"doctor", "--config", configPath}, &out, &errOut)
+	if err == nil {
+		t.Fatal("doctor succeeded with missing policy")
+	}
+	if !strings.Contains(out.String(), "fail policy bundle") {
+		t.Fatalf("doctor output = %q", out.String())
+	}
+}
+
 func TestAgentStartValidatesPolicyBeforeServing(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "continuum.toml")

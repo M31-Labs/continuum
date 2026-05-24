@@ -68,6 +68,7 @@ kind = "cli"
 continuum policy check policies/main.arb
 continuum policy publish --config continuum.toml policies/main.arb
 continuum policy activate --config continuum.toml agent-workdir
+continuum doctor --config continuum.toml
 ```
 
 ## 4. Start The Daemon
