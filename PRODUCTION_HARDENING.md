@@ -105,7 +105,7 @@ enforcement backends exist and are reviewed.
 - [ ] Add process tree pruning and retention policy.
 - [x] Add subject identity merge tests for session, cgroup, and repo subjects.
 - [ ] Add `continuum run` environment redaction in audit/session output.
-- [ ] Add child-process synthetic fixture coverage.
+- [x] Add child-process synthetic fixture coverage.
 - [ ] Add daemon-side source lifecycle health for all registered sources.
 - [ ] Add bounded source loop backpressure.
 

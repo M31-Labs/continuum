@@ -174,6 +174,42 @@ func TestSessionStoreTracksChildProcessEvents(t *testing.T) {
 	}
 }
 
+func TestSessionStoreTracksChildProcessFixture(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "testdata", "events", "child_process_tree.json"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	events, err := DecodeEvents(data, nil)
+	if err != nil {
+		t.Fatalf("DecodeEvents: %v", err)
+	}
+	store := &SessionStore{}
+	changed, err := store.TrackProcessEvents(events, nil)
+	if err != nil {
+		t.Fatalf("TrackProcessEvents: %v", err)
+	}
+	if changed != len(events) {
+		t.Fatalf("changed = %d, want %d", changed, len(events))
+	}
+	if len(store.Sessions) != 1 {
+		t.Fatalf("sessions = %+v", store.Sessions)
+	}
+	session := store.Sessions[0]
+	if session.ID != "agent-child-fixture" || session.State != SessionExited {
+		t.Fatalf("session = %+v", session)
+	}
+	if session.Subject.Cgroup != "/user.slice/agent.scope" || session.Subject.RepoRoot != "/src/app" {
+		t.Fatalf("session subject = %+v", session.Subject)
+	}
+	if session.ProcessTree == nil || session.ProcessTree.RootPID != 100 || len(session.ProcessTree.Processes) != 2 {
+		t.Fatalf("process tree = %+v", session.ProcessTree)
+	}
+	child := findProcess(t, session.ProcessTree, 101)
+	if child.ParentPID != 100 || child.Comm != "go" || child.State != ProcessExited {
+		t.Fatalf("child = %+v", child)
+	}
+}
+
 func findSessionForTest(sessions []Session, id string) (Session, bool) {
 	for _, session := range sessions {
 		if session.ID == id {

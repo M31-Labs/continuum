@@ -1,0 +1,83 @@
+[
+  {
+    "id": "evt_child_root_exec",
+    "time": "2026-05-23T12:00:00Z",
+    "source": "fixture.synthetic",
+    "kind": "process.exec",
+    "subject": {
+      "kind": "agent",
+      "id": "agent:claude",
+      "session": "agent-child-fixture",
+      "pid": 100,
+      "repo_root": "/src/app",
+      "agent_name": "claude"
+    },
+    "fields": {
+      "pid": 100,
+      "comm": "bash",
+      "argv_text": "bash",
+      "cwd": "/src/app"
+    }
+  },
+  {
+    "id": "evt_child_exec",
+    "time": "2026-05-23T12:00:01Z",
+    "source": "fixture.synthetic",
+    "kind": "process.exec",
+    "subject": {
+      "kind": "agent",
+      "id": "agent:claude",
+      "session": "agent-child-fixture",
+      "pid": 100,
+      "cgroup": "/user.slice/agent.scope",
+      "repo_root": "/src/app",
+      "agent_name": "claude"
+    },
+    "fields": {
+      "pid": 101,
+      "ppid": 100,
+      "comm": "go",
+      "argv_text": "go test ./...",
+      "cwd": "/src/app",
+      "cgroup": "/user.slice/agent.scope"
+    }
+  },
+  {
+    "id": "evt_child_exit",
+    "time": "2026-05-23T12:00:02Z",
+    "source": "fixture.synthetic",
+    "kind": "process.exit",
+    "subject": {
+      "kind": "agent",
+      "id": "agent:claude",
+      "session": "agent-child-fixture",
+      "pid": 100,
+      "cgroup": "/user.slice/agent.scope",
+      "repo_root": "/src/app",
+      "agent_name": "claude"
+    },
+    "fields": {
+      "pid": 101,
+      "exit_code": 0
+    }
+  },
+  {
+    "id": "evt_child_root_exit",
+    "time": "2026-05-23T12:00:03Z",
+    "source": "fixture.synthetic",
+    "kind": "process.exit",
+    "subject": {
+      "kind": "agent",
+      "id": "agent:claude",
+      "session": "agent-child-fixture",
+      "pid": 100,
+      "cgroup": "/user.slice/agent.scope",
+      "repo_root": "/src/app",
+      "agent_name": "claude"
+    },
+    "fields": {
+      "pid": 100,
+      "exit_code": 0
+    }
+  }
+]
