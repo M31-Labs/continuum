@@ -27,6 +27,55 @@ func TestStatusCommand(t *testing.T) {
 	}
 }
 
+func TestAgentStartValidatesPolicyBeforeServing(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "continuum.toml")
+	config := `
+[project]
+name = "invalid-policy"
+
+[policy]
+bundle = "missing.arb"
+
+[audit]
+kind = "jsonl"
+path = ".continuum/audit.jsonl"
+
+[subject]
+default_kind = "agent"
+default_mode = "ask"
+
+[capabilities]
+horizon_manifest_dir = ".continuum/capabilities"
+
+[state]
+policy_store = ".continuum/policies.json"
+grant_store = ".continuum/grants.json"
+delivery_store = ".continuum/deliveries.json"
+session_store = ".continuum/sessions.json"
+airlock_store = ".continuum/airlock.json"
+
+[enforcement]
+network = "observe"
+file = "observe"
+process = "observe"
+
+[approval]
+kind = "cli"
+`
+	if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var out, errOut bytes.Buffer
+	err := runAgent([]string{"start", "--config", configPath}, &out, &errOut)
+	if err == nil {
+		t.Fatal("runAgent succeeded with missing policy")
+	}
+	if !strings.Contains(err.Error(), "daemon readiness failed") || !strings.Contains(err.Error(), "policy") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestStatusCommandInspectsStores(t *testing.T) {
 	dir := t.TempDir()
 	policyStore := filepath.Join(dir, "policies.json")

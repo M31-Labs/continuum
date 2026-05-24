@@ -40,19 +40,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "continuum-agent:", err)
 		os.Exit(1)
 	}
+	paths := daemonStatePaths(cfg)
+	if err := cruntime.CheckReadiness(daemon, paths).Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "continuum-agent:", err)
+		os.Exit(1)
+	}
 	health := daemon.Health()
 	fmt.Printf("continuum-agent: started project=%s capabilities=%d enforcement=file:%s network:%s process:%s\n",
 		cfg.Project.Name, health.Capabilities, cfg.Enforcement.File, cfg.Enforcement.Network, cfg.Enforcement.Process)
 	if *listen != "" || *unixSocket != "" {
-		handler := cruntime.NewHTTPHandlerWithStateAndOptions(daemon, cruntime.StatePaths{
-			PolicyStore:  cfg.State.PolicyStore,
-			PolicyBundle: cfg.Policy.Bundle,
-			Sessions:     cfg.State.SessionStore,
-			Grants:       cfg.State.GrantStore,
-			Deliveries:   cfg.State.DeliveryStore,
-			Airlock:      cfg.State.AirlockStore,
-			Audit:        cfg.Audit.Path,
-		}, cruntime.HTTPOptions{
+		handler := cruntime.NewHTTPHandlerWithStateAndOptions(daemon, paths, cruntime.HTTPOptions{
 			AuthToken:           *authToken,
 			RequireAuthForReads: *authReads,
 			AllowedOrigins:      allowedOrigins,
@@ -71,6 +68,18 @@ func main() {
 			fmt.Fprintln(os.Stderr, "continuum-agent:", err)
 			os.Exit(1)
 		}
+	}
+}
+
+func daemonStatePaths(cfg config.Config) cruntime.StatePaths {
+	return cruntime.StatePaths{
+		PolicyStore:  cfg.State.PolicyStore,
+		PolicyBundle: cfg.Policy.Bundle,
+		Sessions:     cfg.State.SessionStore,
+		Grants:       cfg.State.GrantStore,
+		Deliveries:   cfg.State.DeliveryStore,
+		Airlock:      cfg.State.AirlockStore,
+		Audit:        cfg.Audit.Path,
 	}
 }
 

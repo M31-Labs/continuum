@@ -42,7 +42,7 @@ enforcement backends exist and are reviewed.
 
 ## Policy And Capability Safety
 
-- [ ] Validate active policy existence at daemon startup.
+- [x] Validate active policy existence at daemon startup.
 - [ ] Validate policy outcome names against registered route capabilities.
 - [ ] Validate policy input fields against normalized Continuum facts.
 - [ ] Add policy bundle provenance metadata.
