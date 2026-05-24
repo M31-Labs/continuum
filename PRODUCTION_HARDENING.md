@@ -107,7 +107,7 @@ enforcement backends exist and are reviewed.
 - [x] Add `continuum run` environment redaction in audit/session output.
 - [x] Add child-process synthetic fixture coverage.
 - [x] Add daemon-side source lifecycle health for all registered sources.
-- [ ] Add bounded source loop backpressure.
+- [x] Add bounded source loop backpressure.
 
 ## Airlock Readiness
 

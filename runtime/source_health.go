@@ -21,14 +21,16 @@ const (
 )
 
 type SourceHealth struct {
-	Name        string                `json:"name"`
-	Status      SourceLifecycleStatus `json:"status"`
-	Events      uint64                `json:"events"`
-	StartedAt   *time.Time            `json:"started_at,omitempty"`
-	StoppedAt   *time.Time            `json:"stopped_at,omitempty"`
-	LastEventAt *time.Time            `json:"last_event_at,omitempty"`
-	UpdatedAt   time.Time             `json:"updated_at"`
-	LastError   string                `json:"last_error,omitempty"`
+	Name               string                `json:"name"`
+	Status             SourceLifecycleStatus `json:"status"`
+	Events             uint64                `json:"events"`
+	BackpressureEvents uint64                `json:"backpressure_events,omitempty"`
+	QueueCapacity      int                   `json:"queue_capacity"`
+	StartedAt          *time.Time            `json:"started_at,omitempty"`
+	StoppedAt          *time.Time            `json:"stopped_at,omitempty"`
+	LastEventAt        *time.Time            `json:"last_event_at,omitempty"`
+	UpdatedAt          time.Time             `json:"updated_at"`
+	LastError          string                `json:"last_error,omitempty"`
 }
 
 type SourceHealthStore struct {
@@ -62,9 +64,10 @@ func (s *SourceHealthStore) Register(name string) {
 	})
 }
 
-func (s *SourceHealthStore) MarkStarting(name string) {
+func (s *SourceHealthStore) MarkStarting(name string, queueCapacity int) {
 	s.update(name, func(health SourceHealth, now time.Time) SourceHealth {
 		health.Status = SourceStatusStarting
+		health.QueueCapacity = queueCapacity
 		health.StartedAt = timePtr(now)
 		health.StoppedAt = nil
 		health.LastError = ""
@@ -85,6 +88,14 @@ func (s *SourceHealthStore) RecordEvent(name string) {
 	s.update(name, func(health SourceHealth, now time.Time) SourceHealth {
 		health.Events++
 		health.LastEventAt = timePtr(now)
+		health.UpdatedAt = now
+		return health
+	})
+}
+
+func (s *SourceHealthStore) RecordBackpressure(name string) {
+	s.update(name, func(health SourceHealth, now time.Time) SourceHealth {
+		health.BackpressureEvents++
 		health.UpdatedAt = now
 		return health
 	})
