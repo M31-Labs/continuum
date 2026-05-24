@@ -125,6 +125,25 @@ func TestCapabilitiesCommandJSON(t *testing.T) {
 	}
 }
 
+func TestCapabilitiesInspectHorizonArtifacts(t *testing.T) {
+	var out, errOut bytes.Buffer
+	err := run([]string{"capabilities", "inspect", "--json", "../../testdata/horizon-export"}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("capabilities inspect: %v", err)
+	}
+	if !strings.Contains(out.String(), `"kind": "exported-package"`) || !strings.Contains(out.String(), `"kernel.process.exec.observe"`) || !strings.Contains(out.String(), `"kind": "bpf-object"`) {
+		t.Fatalf("inspect output = %q", out.String())
+	}
+	out.Reset()
+	err = run([]string{"capabilities", "inspect", "../../testdata/horizon-export/input.hzn"}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("capabilities inspect hzn: %v", err)
+	}
+	if !strings.Contains(out.String(), "needs_export=true") || !strings.Contains(out.String(), "Horizon") {
+		t.Fatalf("inspect hzn output = %q", out.String())
+	}
+}
+
 func TestPolicyActivateCommand(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "policies.json")
 	var out, errOut bytes.Buffer

@@ -55,26 +55,26 @@ enforcement backends exist and are reviewed.
 
 ## Horizon Artifact Intake
 
-- [ ] Detect `.hzn` source inputs and route them through Horizon-owned export
+- [x] Detect `.hzn` source inputs and route them through Horizon-owned export
       tooling rather than compiling them inside Continuum.
-- [ ] Accept Horizon exported package directories as capability sources.
-- [ ] Accept already compiled eBPF object references as capability artifact
+- [x] Accept Horizon exported package directories as capability sources.
+- [x] Accept already compiled eBPF object references as capability artifact
       metadata without loading them directly.
-- [ ] Register source/sink/worker capabilities from exported Horizon package
+- [x] Register source/sink/worker capabilities from exported Horizon package
       metadata.
-- [ ] Preserve BPF object path, program name, section, map names, and event
+- [x] Preserve BPF object path, program name, section, map names, and event
       stream names as capability metadata.
-- [ ] Validate artifact file existence and readability during capability load.
-- [ ] Record artifact digests for exported `.bpf.o`, generated bindings, and
+- [x] Validate artifact file existence and readability during capability load.
+- [x] Record artifact digests for exported `.bpf.o`, generated bindings, and
       manifest files.
-- [ ] Add `continuum capabilities inspect <path>` for `.hzn`, `.cap.json`,
+- [x] Add `continuum capabilities inspect <path>` for `.hzn`, `.cap.json`,
       exported package dirs, and compiled artifact manifests.
-- [ ] Add clear diagnostics when a `.hzn` file requires Horizon export first.
-- [ ] Document the boundary: Continuum consumes declarations and streams;
+- [x] Add clear diagnostics when a `.hzn` file requires Horizon export first.
+- [x] Document the boundary: Continuum consumes declarations and streams;
       Horizon authors, compiles, loads, and transports eBPF.
-- [ ] Add fixtures for `.hzn`, exported package directory, and compiled object
+- [x] Add fixtures for `.hzn`, exported package directory, and compiled object
       reference manifests.
-- [ ] Add tests that artifact intake never grants raw kernel handles to policy.
+- [x] Add tests that artifact intake never grants raw kernel handles to policy.
 
 ## Grant And Approval Hardening
 

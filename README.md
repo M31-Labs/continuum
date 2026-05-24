@@ -46,6 +46,9 @@ continuum agent start --config continuum.toml --listen 8787 --auth-token "$CONTI
 curl -X POST --data-binary @events.jsonl http://127.0.0.1:8787/ingest
 continuum ingest --daemon http://127.0.0.1:8787 --daemon-token "$CONTINUUM_DAEMON_TOKEN" --events events.jsonl
 continuum capabilities
+continuum capabilities inspect .continuum/capabilities
+continuum capabilities inspect path/to/probe.hzn
+continuum capabilities inspect path/to/exported/output.bpf.o
 continuum grant --session agent-session-42 --capability network.connect --host github.com --port 443 --ttl 20m --reason "fetch dependency"
 continuum grant --session agent-session-42 --capability file.write --path .github/workflows/test.yml --op write --ttl 20m --reason "approve CI edit"
 continuum audit list
@@ -146,6 +149,12 @@ Continuum adapts each Horizon capability declaration into a registered
 Continuum capability while preserving program, section, emitted event type, and
 map access metadata. Horizon remains responsible for producing and running the
 probe artifacts.
+
+`continuum capabilities inspect <path>` recognizes `.hzn` source, `.cap.json`
+manifests, exported package directories, and compiled `.bpf.o` artifact
+references. `.hzn` inputs are reported as requiring Horizon export first.
+Compiled/exported artifacts are recorded by digest as metadata; Continuum does
+not load eBPF objects or expose raw kernel handles to policy.
 
 For event handoff, Continuum accepts a Horizon envelope:
 
