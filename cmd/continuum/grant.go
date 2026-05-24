@@ -238,21 +238,40 @@ func runGrantPrune(args []string, stdout, stderr io.Writer) error {
 	}
 	*storePath = resolveGrantStorePath(*storePath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
-	now := time.Now().UTC()
+	removed, err := pruneExpiredGrantStore(*storePath, *deliveryPath, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "pruned grants removed=%d\n", removed)
+	return nil
+}
+
+func pruneExpiredGrantStore(storePath, deliveryPath string, now time.Time) (int, error) {
+	if storePath == "" {
+		return 0, fmt.Errorf("grant store path is required")
+	}
+	if !fileExists(storePath) {
+		return 0, nil
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 	var expired []capability.Grant
 	var removed int
-	if err := capability.UpdateGrantStore(*storePath, func(store *capability.GrantStore) error {
+	if err := capability.UpdateGrantStore(storePath, func(store *capability.GrantStore) error {
 		expired = store.Expired(now)
+		if len(expired) == 0 {
+			return nil
+		}
 		for _, grant := range expired {
-			if _, err := cruntime.EnqueueGrantRevocation(*deliveryPath, grant, "grant expired", now); err != nil {
+			if _, err := cruntime.EnqueueGrantRevocation(deliveryPath, grant, "grant expired", now); err != nil {
 				return err
 			}
 		}
 		removed = store.PruneExpired(now)
 		return nil
 	}); err != nil {
-		return err
+		return 0, err
 	}
-	fmt.Fprintf(stdout, "pruned grants removed=%d\n", removed)
-	return nil
+	return removed, nil
 }

@@ -49,6 +49,13 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		paths := daemonStatePaths(cfg)
+		prunedGrants, err := pruneExpiredGrantStore(paths.Grants, paths.Deliveries, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		if prunedGrants > 0 {
+			fmt.Fprintf(stdout, "continuum-agent: pruned expired_grants=%d\n", prunedGrants)
+		}
 		if err := cruntime.CheckReadiness(daemon, paths).Err(); err != nil {
 			return err
 		}

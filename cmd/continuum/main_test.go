@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
@@ -182,6 +183,73 @@ kind = "cli"
 	}
 	if !strings.Contains(err.Error(), "daemon readiness failed") || !strings.Contains(err.Error(), "policy") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestAgentStartPrunesExpiredGrants(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "continuum.toml")
+	grantStore := filepath.Join(dir, "state", "grants.json")
+	deliveryStore := filepath.Join(dir, "state", "deliveries.json")
+	manifestDir := filepath.Join(dir, "capabilities")
+	if err := os.MkdirAll(manifestDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	policyPath, err := filepath.Abs("../../examples/agent-workdir/policies/main.arb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	configText := `[project]
+name = "agent-prune"
+
+[policy]
+bundle = "` + policyPath + `"
+
+[capabilities]
+horizon_manifest_dir = "capabilities"
+
+[state]
+policy_store = "state/policies.json"
+grant_store = "state/grants.json"
+delivery_store = "state/deliveries.json"
+session_store = "state/sessions.json"
+airlock_store = "state/airlock.json"
+`
+	if err := os.WriteFile(configPath, []byte(configText), 0600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	grants := &capability.GrantStore{}
+	if err := grants.Add(capability.Grant{ID: "grant_expired", Session: "s1", Capability: "network.connect", Scope: map[string]any{"host": "old.example"}, Reason: "expired", CreatedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(-time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := grants.Add(capability.Grant{ID: "grant_active", Session: "s1", Capability: "network.connect", Scope: map[string]any{"host": "github.com"}, Reason: "active", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := grants.Save(grantStore); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if err := runAgent([]string{"start", "--config", configPath}, &out, &errOut); err != nil {
+		t.Fatalf("agent start: %v\nout=%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "pruned expired_grants=1") {
+		t.Fatalf("agent start output = %q", out.String())
+	}
+	stored, err := capability.LoadGrantStore(grantStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Grants) != 1 || stored.Grants[0].ID != "grant_active" {
+		t.Fatalf("stored grants = %+v", stored.Grants)
+	}
+	deliveries, err := cruntime.LoadDeliveryStore(deliveryStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := deliveries.List()
+	if len(items) != 1 || items[0].Capability != cruntime.GrantRevocationCapability {
+		t.Fatalf("delivery items = %+v", items)
 	}
 }
 
