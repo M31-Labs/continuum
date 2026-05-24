@@ -18,6 +18,14 @@ type Grant struct {
 	CreatedAt  time.Time      `json:"created_at"`
 	ExpiresAt  time.Time      `json:"expires_at"`
 	RevokedAt  time.Time      `json:"revoked_at,omitempty"`
+	Renewals   []GrantRenewal `json:"renewals,omitempty"`
+}
+
+type GrantRenewal struct {
+	RenewedAt         time.Time `json:"renewed_at"`
+	PreviousExpiresAt time.Time `json:"previous_expires_at"`
+	ExpiresAt         time.Time `json:"expires_at"`
+	Reason            string    `json:"reason"`
 }
 
 func (g Grant) Expired(now time.Time) bool {

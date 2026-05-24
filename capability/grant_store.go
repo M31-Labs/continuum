@@ -72,6 +72,45 @@ func (s *GrantStore) Revoke(id string, now time.Time) (Grant, error) {
 	return Grant{}, fmt.Errorf("grant %q not found", id)
 }
 
+func (s *GrantStore) Renew(id string, ttl time.Duration, reason string, now time.Time) (Grant, error) {
+	if ttl <= 0 {
+		return Grant{}, fmt.Errorf("grant renewal ttl must be positive")
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return Grant{}, fmt.Errorf("grant renewal reason is required")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	for i := range s.Grants {
+		if s.Grants[i].ID != id {
+			continue
+		}
+		grant := &s.Grants[i]
+		if !grant.RevokedAt.IsZero() {
+			return Grant{}, fmt.Errorf("grant %q is revoked", id)
+		}
+		if grant.Expired(now) {
+			return Grant{}, fmt.Errorf("grant %q is expired", id)
+		}
+		nextExpiry := now.Add(ttl)
+		if !nextExpiry.After(grant.ExpiresAt) {
+			return Grant{}, fmt.Errorf("grant renewal must extend the current expiry")
+		}
+		previousExpiry := grant.ExpiresAt
+		grant.ExpiresAt = nextExpiry
+		grant.Renewals = append(grant.Renewals, GrantRenewal{
+			RenewedAt:         now,
+			PreviousExpiresAt: previousExpiry,
+			ExpiresAt:         nextExpiry,
+			Reason:            reason,
+		})
+		return *grant, nil
+	}
+	return Grant{}, fmt.Errorf("grant %q not found", id)
+}
+
 func (s *GrantStore) Active(now time.Time) []Grant {
 	if now.IsZero() {
 		now = time.Now().UTC()

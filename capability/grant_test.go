@@ -60,6 +60,34 @@ func TestGrantStorePersistsAndFilters(t *testing.T) {
 	}
 }
 
+func TestGrantStoreRenewExtendsActiveGrant(t *testing.T) {
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	store := &GrantStore{}
+	grant := Grant{ID: "grant_1", Session: "s1", Capability: "network.connect", Reason: "fetch", CreatedAt: now, ExpiresAt: now.Add(time.Minute)}
+	if err := store.Add(grant); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	renewed, err := store.Renew("grant_1", 5*time.Minute, "dependency update still running", now.Add(30*time.Second))
+	if err != nil {
+		t.Fatalf("Renew: %v", err)
+	}
+	if !renewed.ExpiresAt.Equal(now.Add(30*time.Second).Add(5*time.Minute)) || len(renewed.Renewals) != 1 {
+		t.Fatalf("renewed grant = %+v", renewed)
+	}
+	if renewed.Renewals[0].Reason != "dependency update still running" || !renewed.Renewals[0].PreviousExpiresAt.Equal(now.Add(time.Minute)) {
+		t.Fatalf("renewal = %+v", renewed.Renewals[0])
+	}
+	if _, err := store.Renew("grant_1", time.Second, "too short", now.Add(time.Minute)); err == nil {
+		t.Fatal("short renewal succeeded")
+	}
+	if _, err := store.Revoke("grant_1", now.Add(2*time.Minute)); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	if _, err := store.Renew("grant_1", time.Hour, "revoked", now.Add(3*time.Minute)); err == nil {
+		t.Fatal("revoked grant renewal succeeded")
+	}
+}
+
 func TestUpdateGrantStoreSerializesMutations(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "grants.json")
 	started := make(chan struct{})

@@ -18,6 +18,8 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 		switch args[0] {
 		case "list":
 			return runGrantList(args[1:], stdout, stderr)
+		case "renew":
+			return runGrantRenew(args[1:], stdout, stderr)
 		case "revoke":
 			return runGrantRevoke(args[1:], stdout, stderr)
 		case "prune":
@@ -44,7 +46,7 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if *session == "" || *capName == "" {
-		return usageError("Usage: continuum grant --session <id> --capability <name> [--host host --port port | --path path --op write | --comm go] --ttl 20m --reason <text>\n       continuum grant list|revoke|prune")
+		return usageError("Usage: continuum grant --session <id> --capability <name> [--host host --port port | --path path --op write | --comm go] --ttl 20m --reason <text>\n       continuum grant list|renew|revoke|prune")
 	}
 	reasonText := strings.TrimSpace(*reason)
 	if reasonText == "" {
@@ -270,6 +272,50 @@ func runGrantList(args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\n", grant.ID, grant.Session, grant.Capability, state, grant.ExpiresAt.Format(time.RFC3339))
 	}
+	return nil
+}
+
+func runGrantRenew(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("grant renew", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	configPath := fs.String("config", "continuum.toml", "config path")
+	storePath := fs.String("store", defaultGrantStorePath, "grant store")
+	ttl := fs.Duration("ttl", 20*time.Minute, "renewal TTL")
+	reason := fs.String("reason", "", "renewal reason")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return usageError("Usage: continuum grant renew [--store .continuum/grants.json] --ttl 20m --reason <text> <grant-id>")
+	}
+	reasonText := strings.TrimSpace(*reason)
+	if reasonText == "" {
+		return usageError("grant renew --reason is required")
+	}
+	if *ttl <= 0 {
+		return usageError("grant renew --ttl must be positive")
+	}
+	cfg, err := loadConfigOrDefault(*configPath)
+	if err != nil {
+		return err
+	}
+	maxTTL, err := configuredMaxGrantTTL(cfg)
+	if err != nil {
+		return err
+	}
+	if *ttl > maxTTL {
+		return usageError(fmt.Sprintf("grant renew --ttl %s exceeds configured maximum %s", ttl.String(), maxTTL.String()))
+	}
+	*storePath = resolveGrantStorePath(*storePath, cfg)
+	var grant capability.Grant
+	if err := capability.UpdateGrantStore(*storePath, func(store *capability.GrantStore) error {
+		var err error
+		grant, err = store.Renew(fs.Arg(0), *ttl, reasonText, time.Now().UTC())
+		return err
+	}); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "renewed grant id=%s session=%s capability=%s expires=%s reason=%q renewals=%d store=%s\n", grant.ID, grant.Session, grant.Capability, grant.ExpiresAt.Format(time.RFC3339), reasonText, len(grant.Renewals), *storePath)
 	return nil
 }
 

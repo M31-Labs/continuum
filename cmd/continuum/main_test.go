@@ -776,6 +776,46 @@ func TestGrantCommandPersistsAndLists(t *testing.T) {
 	}
 }
 
+func TestGrantRenewCommandExtendsGrant(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "grants.json")
+	var out, errOut bytes.Buffer
+	if err := run([]string{
+		"grant",
+		"--store", storePath,
+		"--session", "agent-session-42",
+		"--capability", "network.connect",
+		"--host", "github.com",
+		"--ttl", "1m",
+		"--reason", "fetch dependency",
+	}, &out, &errOut); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	grantID := ""
+	for _, field := range strings.Fields(out.String()) {
+		if strings.HasPrefix(field, "id=") {
+			grantID = strings.TrimPrefix(field, "id=")
+			break
+		}
+	}
+	if grantID == "" {
+		t.Fatalf("grant output missing id: %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"grant", "renew", "--store", storePath, "--ttl", "10m", "--reason", "dependency update still running", grantID}, &out, &errOut); err != nil {
+		t.Fatalf("grant renew: %v", err)
+	}
+	if !strings.Contains(out.String(), "renewed grant id="+grantID) || !strings.Contains(out.String(), "renewals=1") {
+		t.Fatalf("renew output = %q", out.String())
+	}
+	store, err := capability.LoadGrantStore(storePath)
+	if err != nil {
+		t.Fatalf("LoadGrantStore: %v", err)
+	}
+	if len(store.Grants) != 1 || len(store.Grants[0].Renewals) != 1 || store.Grants[0].Renewals[0].Reason == "" {
+		t.Fatalf("stored grant = %+v", store.Grants)
+	}
+}
+
 func TestGrantCommandRequiresReason(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "grants.json")
 	var out, errOut bytes.Buffer
