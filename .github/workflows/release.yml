@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  audit-schema-artifact:
+  release-artifacts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -23,6 +23,14 @@ jobs:
 
       - name: Build audit schema artifact
         run: make audit-schema-artifact VERSION="${GITHUB_REF_NAME}"
+
+      - name: Build release artifacts
+        run: make release-artifacts VERSION="${GITHUB_REF_NAME}" COMMIT="${GITHUB_SHA}"
+
+      - name: Verify release artifact checksums
+        run: |
+          cd dist
+          sha256sum -c "continuum-${GITHUB_REF_NAME}-checksums.txt"
 
       - name: Install cosign
         run: |
@@ -53,22 +61,25 @@ jobs:
 
       - uses: actions/upload-artifact@v6
         with:
-          name: audit-schema-docs-${{ github.ref_name }}
+          name: release-assets-${{ github.ref_name }}
           path: |
             dist/audit-schema-docs-${{ github.ref_name }}.tar.gz
             dist/audit-schema-docs-${{ github.ref_name }}.sha256
             dist/audit-schema-docs-${{ github.ref_name }}.sha256.sigstore.json
+            dist/continuum-${{ github.ref_name }}-checksums.txt
+            dist/continuum-${{ github.ref_name }}-*.tar.gz
           if-no-files-found: error
 
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          assets=(
-            "dist/audit-schema-docs-${GITHUB_REF_NAME}.tar.gz"
-            "dist/audit-schema-docs-${GITHUB_REF_NAME}.sha256"
-            "dist/audit-schema-docs-${GITHUB_REF_NAME}.sha256.sigstore.json"
-          )
+          mapfile -t assets < <(find dist -maxdepth 1 -type f \
+            \( -name "audit-schema-docs-${GITHUB_REF_NAME}.tar.gz" \
+            -o -name "audit-schema-docs-${GITHUB_REF_NAME}.sha256" \
+            -o -name "audit-schema-docs-${GITHUB_REF_NAME}.sha256.sigstore.json" \
+            -o -name "continuum-${GITHUB_REF_NAME}-checksums.txt" \
+            -o -name "continuum-${GITHUB_REF_NAME}-*.tar.gz" \) | sort)
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
           else

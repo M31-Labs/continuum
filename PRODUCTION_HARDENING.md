@@ -129,7 +129,7 @@ enforcement backends exist and are reviewed.
 - [x] Add systemd unit example.
 - [x] Add launchd plist example.
 - [x] Add container image build.
-- [ ] Add release packaging for Linux and macOS.
+- [x] Add release packaging for Linux and macOS.
 - [x] Add changelog and release process.
 
 ## CI And Quality Gates

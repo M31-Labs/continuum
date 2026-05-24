@@ -57,6 +57,27 @@ and `continuum-agent`. The CI workflow builds and smoke-tests the image on each
 push and pull request. Publishing the image to a registry is intentionally kept
 as an explicit release operation.
 
+## Linux And macOS Packages
+
+Build release tarballs for Linux and macOS with:
+
+```sh
+make release-artifacts VERSION="$VERSION"
+```
+
+This produces:
+
+- `continuum-$VERSION-linux-amd64.tar.gz`
+- `continuum-$VERSION-linux-arm64.tar.gz`
+- `continuum-$VERSION-darwin-amd64.tar.gz`
+- `continuum-$VERSION-darwin-arm64.tar.gz`
+- `continuum-$VERSION-checksums.txt`
+
+Each archive includes `continuum`, `continuum-agent`, `README.md`, `LICENSE`,
+and `MANIFEST.txt` with version, commit, build date, target, and observe-mode
+status. The release workflow verifies the checksum manifest before publishing
+the tarballs.
+
 ## Signed Audit Schema Artifact
 
 Every tagged release publishes an audit schema documentation artifact and signs
