@@ -321,7 +321,7 @@ func TestPolicyCheckCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("policy check: %v", err)
 	}
-	if !strings.Contains(out.String(), "policy ok") || !strings.Contains(out.String(), "kind=agent-workdir") {
+	if !strings.Contains(out.String(), "policy ok") || !strings.Contains(out.String(), "kind=agent-workdir") || !strings.Contains(out.String(), "inputs=") || !strings.Contains(out.String(), "routes=") {
 		t.Fatalf("check output = %q", out.String())
 	}
 }
@@ -356,6 +356,40 @@ rule Unsupported priority 1 {
 		t.Fatalf("policy check succeeded: %s", out.String())
 	}
 	if !strings.Contains(err.Error(), "policy outcome route validation failed") || !strings.Contains(err.Error(), "Quarantine") {
+		t.Fatalf("policy check error = %v", err)
+	}
+}
+
+func TestPolicyCheckRejectsUnsupportedInputField(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unsupported-input.arb")
+	if err := os.WriteFile(path, []byte(`
+input {
+	kernel: {
+		raw_pid: number
+	}
+}
+
+outcome Allow {
+	reason: string
+}
+
+rule UnsupportedInput priority 1 {
+	when {
+		kernel.raw_pid > 0
+	}
+	then Allow {
+		reason: "unsupported",
+	}
+}
+`), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var out, errOut bytes.Buffer
+	err := run([]string{"policy", "check", path}, &out, &errOut)
+	if err == nil {
+		t.Fatalf("policy check succeeded: %s", out.String())
+	}
+	if !strings.Contains(err.Error(), "policy input validation failed") || !strings.Contains(err.Error(), "input.kernel") {
 		t.Fatalf("policy check error = %v", err)
 	}
 }

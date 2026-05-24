@@ -10,6 +10,7 @@ import (
 	"slices"
 	"time"
 
+	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/policy"
 	cruntime "m31labs.dev/continuum/runtime"
 )
@@ -38,11 +39,11 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		routes, err := validatePolicyRoutes(context.Background(), bundle, cfg.Config.Capabilities.HorizonManifestDir)
+		report, err := validatePolicy(context.Background(), bundle, cfg.Config.Capabilities.HorizonManifestDir)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "policy ok name=%s id=%s kind=%s routes=%d path=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, len(routes.Routes), fs.Arg(0))
+		fmt.Fprintf(stdout, "policy ok name=%s id=%s kind=%s inputs=%d routes=%d path=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, len(report.Inputs.Fields), len(report.Routes.Routes), fs.Arg(0))
 		return nil
 	case "publish":
 		fs := flag.NewFlagSet("policy publish", flag.ContinueOnError)
@@ -65,7 +66,7 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		routes, err := validatePolicyRoutes(context.Background(), bundle, cfg.Config.Capabilities.HorizonManifestDir)
+		report, err := validatePolicy(context.Background(), bundle, cfg.Config.Capabilities.HorizonManifestDir)
 		if err != nil {
 			return err
 		}
@@ -74,7 +75,7 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		}); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "published policy name=%s id=%s kind=%s routes=%d path=%s store=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, len(routes.Routes), fs.Arg(0), *storePath)
+		fmt.Fprintf(stdout, "published policy name=%s id=%s kind=%s inputs=%d routes=%d path=%s store=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, len(report.Inputs.Fields), len(report.Routes.Routes), fs.Arg(0), *storePath)
 		return nil
 	case "activate":
 		fs := flag.NewFlagSet("policy activate", flag.ContinueOnError)
@@ -171,15 +172,28 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 	}
 }
 
-func validatePolicyRoutes(ctx context.Context, bundle policy.Bundle, manifestDir string) (cruntime.OutcomeRouteReport, error) {
+type policyValidationReport struct {
+	Inputs arbiterx.PolicyInputReport
+	Routes cruntime.OutcomeRouteReport
+}
+
+func validatePolicy(ctx context.Context, bundle policy.Bundle, manifestDir string) (policyValidationReport, error) {
 	if err := bundle.Validate(); err != nil {
-		return cruntime.OutcomeRouteReport{}, err
+		return policyValidationReport{}, err
+	}
+	inputs, err := arbiterx.ValidatePolicyInputs(bundle.Program)
+	if err != nil {
+		return policyValidationReport{}, err
 	}
 	registry, err := loadCapabilityRegistry(ctx, manifestDir)
 	if err != nil {
-		return cruntime.OutcomeRouteReport{}, err
+		return policyValidationReport{}, err
 	}
-	return cruntime.ValidateOutcomeRoutes(bundle.Program, registry)
+	routes, err := cruntime.ValidateOutcomeRoutes(bundle.Program, registry)
+	if err != nil {
+		return policyValidationReport{}, err
+	}
+	return policyValidationReport{Inputs: inputs, Routes: routes}, nil
 }
 
 func sortedStoredBundles(store *policy.Store) []policy.StoredBundle {

@@ -44,7 +44,7 @@ enforcement backends exist and are reviewed.
 
 - [x] Validate active policy existence at daemon startup.
 - [x] Validate policy outcome names against registered route capabilities.
-- [ ] Validate policy input fields against normalized Continuum facts.
+- [x] Validate policy input fields against normalized Continuum facts.
 - [ ] Add policy bundle provenance metadata.
 - [ ] Add policy activation rollback.
 - [ ] Add signed capability manifest support.

@@ -156,6 +156,12 @@ func (r *doctorReport) checkPolicy(path, manifestDir string) {
 		return
 	}
 	r.add(doctorOK, "policy bundle", fmt.Sprintf("compiled policy id=%s kind=%s", bundle.ID, bundle.Kind), path)
+	inputs, err := arbiterx.ValidatePolicyInputs(bundle)
+	if err != nil {
+		r.add(doctorFail, "policy inputs", err.Error(), path)
+		return
+	}
+	r.add(doctorOK, "policy inputs", fmt.Sprintf("validated fields=%d", len(inputs.Fields)), path)
 	registry, err := loadCapabilityRegistry(context.Background(), manifestDir)
 	if err != nil {
 		r.add(doctorFail, "policy routes", fmt.Sprintf("capability load failed: %v", err), manifestDir)
