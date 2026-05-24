@@ -1,5 +1,7 @@
 # Continuum
 
+[![test](https://github.com/M31-Labs/continuum/actions/workflows/test.yml/badge.svg)](https://github.com/M31-Labs/continuum/actions/workflows/test.yml)
+
 A governed capability fabric for machines.
 
 Continuum routes machine facts and machine powers through Arbiter. It consumes
@@ -90,7 +92,8 @@ V0 is observe-first. It can:
 - serve daemon health, capabilities, sessions, grants, airlocks, audit state,
   and governed event ingestion over HTTP
 
-V0 does not claim kernel enforcement. `observe` records decisions; `noop` is for tests and dry runs.
+V0 is ready for production-style observe-mode pilots. It does not claim kernel
+enforcement. `observe` records decisions; `noop` is for tests and dry runs.
 
 ## Config
 
@@ -139,6 +142,9 @@ evaluation, outcome routing, audit, grants, and containment state.
 Continuum consumes Horizon `cap.json` manifests as declarations of available
 machine capabilities. It does not implement Horizon probes or pretend to own
 their kernel/runtime mechanics.
+
+See [docs/observe-mode-threat-model.md](docs/observe-mode-threat-model.md) for
+the observe-mode threat model and explicit non-enforcement boundaries.
 
 ### Horizon Integration
 
@@ -194,4 +200,5 @@ store readability. CORS is denied by default; set `[daemon] cors_origins` or
 
 ## Status
 
-Pre-alpha.
+Pre-alpha. Continuum is not a kernel enforcement boundary until real
+enforcement backends are configured, tested, and reviewed.

@@ -124,7 +124,7 @@ enforcement backends exist and are reviewed.
 - [ ] Add `continuum doctor` for config, paths, policies, and permissions.
 - [x] Add `continuum version` with commit and build metadata.
 - [ ] Add structured JSON output for every inspection command.
-- [ ] Add clear public README status badges and safety boundary language.
+- [x] Add clear public README status badges and safety boundary language.
 - [ ] Add quickstart for observe-mode production pilot.
 - [ ] Add systemd unit example.
 - [ ] Add launchd plist example.
@@ -142,18 +142,18 @@ enforcement backends exist and are reviewed.
 - [ ] Add fuzz tests for event and Horizon envelope decoding.
 - [ ] Add golden tests for daemon error responses.
 - [ ] Add integration test for daemon ingest plus session persistence.
-- [ ] Add public-repo secret scanning guidance.
+- [x] Add public-repo secret scanning guidance.
 - [ ] Add dependency update policy.
 
 ## Security Review
 
-- [ ] Document the observe-mode threat model.
-- [ ] Document what Continuum explicitly does not enforce yet.
+- [x] Document the observe-mode threat model.
+- [x] Document what Continuum explicitly does not enforce yet.
 - [ ] Review daemon path query parameters for local file exposure risks.
 - [ ] Review audit logs for sensitive data exposure.
 - [ ] Review config-relative path handling.
 - [ ] Review all file permission defaults.
 - [ ] Review agent environment inheritance in `continuum run`.
 - [ ] Review policy and manifest trust boundaries.
-- [ ] Add SECURITY.md with disclosure policy.
+- [x] Add SECURITY.md with disclosure policy.
 - [ ] Perform an external security review before claiming enforcement.
