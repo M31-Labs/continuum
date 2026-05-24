@@ -123,10 +123,10 @@ type blockingSource struct {
 func (s blockingSource) Name() string { return s.name }
 
 func (s blockingSource) Start(ctx context.Context, emit capability.EmitFunc) error {
-	close(s.started)
 	if err := emit(ctx, event.Event{ID: "evt_source", Kind: event.KindProcessExec}); err != nil {
 		return err
 	}
+	close(s.started)
 	<-ctx.Done()
 	return ctx.Err()
 }
