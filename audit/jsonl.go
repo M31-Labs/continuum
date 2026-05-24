@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
 
 	"m31labs.dev/continuum/internal/statefile"
 )
+
+const MaxEventBytes = 1 << 20
 
 type JSONLSink struct {
 	mu       sync.Mutex
@@ -41,7 +44,14 @@ func (s *JSONLSink) Write(_ context.Context, event Event) error {
 		return err
 	}
 	event.ChainHash = hash
-	if err := json.NewEncoder(s.f).Encode(event); err != nil {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	if len(data) > MaxEventBytes {
+		return fmt.Errorf("audit event %s is %d bytes, exceeds max %d", event.ID, len(data), MaxEventBytes)
+	}
+	if _, err := s.f.Write(append(data, '\n')); err != nil {
 		return err
 	}
 	if err := s.f.Sync(); err != nil {
@@ -75,7 +85,7 @@ func ReadJSONL(path string) ([]Event, error) {
 	defer f.Close()
 
 	var events []Event
-	scanner := bufio.NewScanner(f)
+	scanner := newScanner(f)
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
@@ -86,7 +96,16 @@ func ReadJSONL(path string) ([]Event, error) {
 		events = append(events, evt)
 	}
 	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			return nil, fmt.Errorf("audit line exceeds max %d bytes", MaxEventBytes)
+		}
 		return nil, err
 	}
 	return events, nil
+}
+
+func newScanner(f *os.File) *bufio.Scanner {
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), MaxEventBytes+1)
+	return scanner
 }

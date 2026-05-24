@@ -116,6 +116,35 @@ func TestVerifyJSONLDetectsTampering(t *testing.T) {
 	}
 }
 
+func TestJSONLEventSizeLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	sink, err := NewJSONLSink(path)
+	if err != nil {
+		t.Fatalf("NewJSONLSink: %v", err)
+	}
+	err = sink.Write(context.Background(), Event{
+		ID:     "evt_large",
+		Time:   time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC),
+		Reason: strings.Repeat("x", MaxEventBytes),
+	})
+	if err == nil {
+		t.Fatal("Write succeeded for oversized audit event")
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", MaxEventBytes+2)), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if _, err := ReadJSONL(path); err == nil {
+		t.Fatal("ReadJSONL succeeded for oversized audit line")
+	}
+	if _, err := VerifyJSONL(path); err == nil {
+		t.Fatal("VerifyJSONL succeeded for oversized audit line")
+	}
+}
+
 func TestQueryFiltersAuditEvents(t *testing.T) {
 	events := []Event{
 		{ID: "evt_1", Decision: "allow", InputEvent: event.Event{Kind: "process.exec"}, Subject: subject.Subject{Session: "s1"}},

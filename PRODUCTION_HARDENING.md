@@ -93,7 +93,7 @@ enforcement backends exist and are reviewed.
 - [x] Add audit chain verification command.
 - [ ] Add audit export with redaction controls.
 - [ ] Add audit query pagination.
-- [ ] Add audit event size limits.
+- [x] Add audit event size limits.
 - [ ] Add audit clock-source metadata.
 - [ ] Add delivery attempt linkage checks in audit tests.
 - [ ] Add signed release artifact for audit schema docs.

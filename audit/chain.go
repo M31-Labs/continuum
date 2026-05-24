@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -41,6 +42,7 @@ func VerifyJSONL(path string) (ChainReport, error) {
 func VerifyJSONLReader(r io.Reader) (ChainReport, error) {
 	report := ChainReport{OK: true}
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 64*1024), MaxEventBytes+1)
 	lineNo := 0
 	prevHash := ""
 	for scanner.Scan() {
@@ -68,6 +70,9 @@ func VerifyJSONLReader(r io.Reader) (ChainReport, error) {
 		prevHash = got
 	}
 	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			return ChainReport{}, fmt.Errorf("audit line exceeds max %d bytes", MaxEventBytes)
+		}
 		return ChainReport{}, err
 	}
 	return report, nil
