@@ -139,7 +139,7 @@ enforcement backends exist and are reviewed.
 - [x] Add staticcheck CI.
 - [x] Add govulncheck CI.
 - [x] Add coverage report generation.
-- [ ] Add fuzz tests for event and Horizon envelope decoding.
+- [x] Add fuzz tests for event and Horizon envelope decoding.
 - [ ] Add golden tests for daemon error responses.
 - [ ] Add integration test for daemon ingest plus session persistence.
 - [x] Add public-repo secret scanning guidance.
