@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -22,6 +23,8 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 			return runGrantRenew(args[1:], stdout, stderr)
 		case "revoke":
 			return runGrantRevoke(args[1:], stdout, stderr)
+		case "retry-revocations":
+			return runGrantRetryRevocations(args[1:], stdout, stderr)
 		case "prune":
 			return runGrantPrune(args[1:], stdout, stderr)
 		}
@@ -46,7 +49,7 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if *session == "" || *capName == "" {
-		return usageError("Usage: continuum grant --session <id> --capability <name> [--host host --port port | --path path --op write | --comm go] --ttl 20m --reason <text>\n       continuum grant list|renew|revoke|prune")
+		return usageError("Usage: continuum grant --session <id> --capability <name> [--host host --port port | --path path --op write | --comm go] --ttl 20m --reason <text>\n       continuum grant list|renew|revoke|retry-revocations|prune")
 	}
 	reasonText := strings.TrimSpace(*reason)
 	if reasonText == "" {
@@ -351,6 +354,32 @@ func runGrantRevoke(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "revoked grant id=%s session=%s capability=%s delivery=%s\n", grant.ID, grant.Session, grant.Capability, delivery.ID)
 	return nil
+}
+
+func runGrantRetryRevocations(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("grant retry-revocations", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	configPath := fs.String("config", "continuum.toml", "config path")
+	deliveryPath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
+	failedOnly := fs.Bool("failed-only", false, "retry only failed revocation deliveries")
+	dryRun := fs.Bool("dry-run", false, "count retryable revocation deliveries without mutating state")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return usageError("Usage: continuum grant retry-revocations [--delivery-store .continuum/deliveries.json] [--failed-only] [--dry-run]")
+	}
+	cfg, err := loadConfigOrDefault(*configPath)
+	if err != nil {
+		return err
+	}
+	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
+	report, err := cruntime.RetryGrantRevocationDeliveries(context.Background(), *deliveryPath, cruntime.GrantRevocationRetryOptions{
+		FailedOnly: *failedOnly,
+		DryRun:     *dryRun,
+	}, cruntime.ObserveGrantRevocationDelivery)
+	fmt.Fprintf(stdout, "retried revocations matched=%d attempted=%d delivered=%d failed=%d dry_run=%t store=%s\n", report.Matched, report.Attempted, report.Delivered, report.Failed, *dryRun, *deliveryPath)
+	return err
 }
 
 func runGrantPrune(args []string, stdout, stderr io.Writer) error {

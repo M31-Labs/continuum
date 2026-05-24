@@ -1277,6 +1277,21 @@ func TestGrantRevokeQueuesDelivery(t *testing.T) {
 	if len(items) != 1 || items[0].Capability != cruntime.GrantRevocationCapability {
 		t.Fatalf("delivery items = %+v", queue.List())
 	}
+	out.Reset()
+	if err := run([]string{"grant", "retry-revocations", "--delivery-store", deliveryPath}, &out, &errOut); err != nil {
+		t.Fatalf("retry revocations: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "attempted=1") || !strings.Contains(out.String(), "delivered=1") {
+		t.Fatalf("retry output = %q", out.String())
+	}
+	queue, err = cruntime.LoadDeliveryStore(deliveryPath)
+	if err != nil {
+		t.Fatalf("reload delivery store: %v", err)
+	}
+	items = queue.ByStatus(cruntime.DeliveryDelivered)
+	if len(items) != 1 || len(items[0].Attempts) != 1 {
+		t.Fatalf("delivered revocation items = %+v", queue.List())
+	}
 }
 
 func TestAuditListFilters(t *testing.T) {

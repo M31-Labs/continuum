@@ -2,15 +2,19 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
+	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/event"
 	"m31labs.dev/continuum/subject"
 )
+
+var errTestDelivery = errors.New("test delivery failure")
 
 func TestDeliveryStorePersistsAttempts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "deliveries.json")
@@ -44,6 +48,49 @@ func TestDeliveryStorePersistsAttempts(t *testing.T) {
 	}
 	if got := reloaded.ByStatus(DeliveryDelivered); len(got) != 1 || len(got[0].Attempts) != 1 {
 		t.Fatalf("delivered = %+v", got)
+	}
+}
+
+func TestRetryGrantRevocationDeliveriesRecordsAttempts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "deliveries.json")
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	grant := capability.Grant{ID: "grant_1", Session: "agent-42", Capability: "network.connect"}
+	item, err := EnqueueGrantRevocation(path, grant, "grant revoked", now)
+	if err != nil {
+		t.Fatalf("EnqueueGrantRevocation: %v", err)
+	}
+	if _, err := RetryGrantRevocationDeliveries(context.Background(), path, GrantRevocationRetryOptions{
+		Now: func() time.Time { return now.Add(time.Second) },
+	}, func(context.Context, DeliveryItem) error {
+		return errTestDelivery
+	}); err == nil {
+		t.Fatal("failed revocation retry returned nil error")
+	}
+	store, err := LoadDeliveryStore(path)
+	if err != nil {
+		t.Fatalf("LoadDeliveryStore: %v", err)
+	}
+	items := store.List()
+	if len(items) != 1 || items[0].Status != DeliveryFailed || len(items[0].Attempts) != 1 {
+		t.Fatalf("failed retry item = %+v", items)
+	}
+	report, err := RetryGrantRevocationDeliveries(context.Background(), path, GrantRevocationRetryOptions{
+		FailedOnly: true,
+		Now:        func() time.Time { return now.Add(2 * time.Second) },
+	}, ObserveGrantRevocationDelivery)
+	if err != nil {
+		t.Fatalf("RetryGrantRevocationDeliveries: %v", err)
+	}
+	if report.Matched != 1 || report.Attempted != 1 || report.Delivered != 1 || report.Failed != 0 {
+		t.Fatalf("retry report = %+v", report)
+	}
+	store, err = LoadDeliveryStore(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	items = store.List()
+	if len(items) != 1 || items[0].ID != item.ID || items[0].Status != DeliveryDelivered || len(items[0].Attempts) != 2 {
+		t.Fatalf("delivered retry item = %+v", items)
 	}
 }
 

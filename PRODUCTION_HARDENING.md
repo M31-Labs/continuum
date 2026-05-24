@@ -83,7 +83,7 @@ enforcement backends exist and are reviewed.
 - [x] Add grant renewal flow instead of silent long-lived grants.
 - [x] Persist approval requester identity when available.
 - [x] Record approval denials as audit events.
-- [ ] Add revocation delivery retry handling.
+- [x] Add revocation delivery retry handling.
 - [x] Add expired-grant pruning to daemon startup.
 - [x] Add grant scope validation for network host/IP and file path forms.
 
