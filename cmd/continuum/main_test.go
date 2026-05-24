@@ -1068,4 +1068,26 @@ func TestAuditListFilters(t *testing.T) {
 	if !strings.Contains(out.String(), "DenyHostSecrets") || strings.Contains(out.String(), "AllowInsideRepo") {
 		t.Fatalf("audit filter output = %q", out.String())
 	}
+	out.Reset()
+	if err := run([]string{"audit", "verify", "--path", path}, &out, &errOut); err != nil {
+		t.Fatalf("audit verify: %v", err)
+	}
+	if !strings.Contains(out.String(), "audit chain ok events=2") {
+		t.Fatalf("audit verify output = %q", out.String())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(data), "DenyHostSecrets", "DenyTampered", 1)), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	out.Reset()
+	err = run([]string{"audit", "verify", "--path", path}, &out, &errOut)
+	if err == nil {
+		t.Fatal("audit verify succeeded on tampered log")
+	}
+	if !strings.Contains(out.String(), "audit chain failed") {
+		t.Fatalf("tamper verify output = %q", out.String())
+	}
 }

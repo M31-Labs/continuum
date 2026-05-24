@@ -89,8 +89,8 @@ enforcement backends exist and are reviewed.
 
 ## Audit Integrity
 
-- [ ] Add audit hash chaining.
-- [ ] Add audit chain verification command.
+- [x] Add audit hash chaining.
+- [x] Add audit chain verification command.
 - [ ] Add audit export with redaction controls.
 - [ ] Add audit query pagination.
 - [ ] Add audit event size limits.

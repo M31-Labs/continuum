@@ -12,16 +12,21 @@ import (
 )
 
 type JSONLSink struct {
-	mu sync.Mutex
-	f  *os.File
+	mu       sync.Mutex
+	f        *os.File
+	prevHash string
 }
 
 func NewJSONLSink(path string) (*JSONLSink, error) {
+	prevHash, err := LastChainHash(path)
+	if err != nil {
+		return nil, err
+	}
 	f, err := statefile.OpenAppend(path)
 	if err != nil {
 		return nil, fmt.Errorf("open audit sink %s: %w", path, err)
 	}
-	return &JSONLSink{f: f}, nil
+	return &JSONLSink{f: f, prevHash: prevHash}, nil
 }
 
 func (s *JSONLSink) Write(_ context.Context, event Event) error {
@@ -30,10 +35,20 @@ func (s *JSONLSink) Write(_ context.Context, event Event) error {
 	if s.f == nil {
 		return fmt.Errorf("audit sink is closed")
 	}
+	event.ChainPrev = s.prevHash
+	hash, err := HashEvent(event)
+	if err != nil {
+		return err
+	}
+	event.ChainHash = hash
 	if err := json.NewEncoder(s.f).Encode(event); err != nil {
 		return err
 	}
-	return s.f.Sync()
+	if err := s.f.Sync(); err != nil {
+		return err
+	}
+	s.prevHash = hash
+	return nil
 }
 
 func (s *JSONLSink) Close() error {

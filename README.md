@@ -58,6 +58,7 @@ continuum grant --session agent-session-42 --capability network.connect --host g
 continuum grant --session agent-session-42 --capability file.write --path .github/workflows/test.yml --op write --ttl 20m --reason "approve CI edit"
 continuum audit list
 continuum audit show evt_123
+continuum audit verify --path .continuum/audit.jsonl
 continuum explain evt_123
 continuum replay --baseline-policy current.arb --policy candidate.arb --events audit.jsonl
 continuum airlock status

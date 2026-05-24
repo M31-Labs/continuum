@@ -30,6 +30,8 @@ type Event struct {
 	Capability  string            `json:"capability,omitempty"`
 	Enforcement string            `json:"enforcement,omitempty"`
 	Delivery    []DeliveryAttempt `json:"delivery,omitempty"`
+	ChainPrev   string            `json:"chain_prev,omitempty"`
+	ChainHash   string            `json:"chain_hash,omitempty"`
 }
 
 type DeliveryAttempt struct {
