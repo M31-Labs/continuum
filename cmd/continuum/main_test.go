@@ -712,6 +712,62 @@ func TestRunCommandAuditsSyntheticProcess(t *testing.T) {
 	}
 }
 
+func TestRunCommandRedactsEnvironmentAssignments(t *testing.T) {
+	dir := t.TempDir()
+	auditPath := filepath.Join(dir, "audit.jsonl")
+	sessionPath := filepath.Join(dir, "sessions.json")
+	idStorePath := filepath.Join(dir, "ids.json")
+	secret := "super-secret-value"
+	var out, errOut bytes.Buffer
+	err := run([]string{
+		"run",
+		"--agent", "claude",
+		"--repo", dir,
+		"--policy", "../../examples/agent-workdir/policies/main.arb",
+		"--audit", auditPath,
+		"--sessions", sessionPath,
+		"--id-store", idStorePath,
+		"--",
+		"env", "AWS_SECRET_ACCESS_KEY=" + secret, "/bin/true",
+	}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("run command: %v\nstderr=%s", err, errOut.String())
+	}
+	auditBytes, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatalf("read audit: %v", err)
+	}
+	sessionBytes, err := os.ReadFile(sessionPath)
+	if err != nil {
+		t.Fatalf("read sessions: %v", err)
+	}
+	for name, data := range map[string][]byte{"audit": auditBytes, "sessions": sessionBytes} {
+		if bytes.Contains(data, []byte(secret)) {
+			t.Fatalf("%s output leaked secret: %s", name, string(data))
+		}
+		if !bytes.Contains(data, []byte("AWS_SECRET_ACCESS_KEY=[REDACTED]")) {
+			t.Fatalf("%s output missing redacted assignment: %s", name, string(data))
+		}
+	}
+	events, err := audit.ReadJSONL(auditPath)
+	if err != nil {
+		t.Fatalf("ReadJSONL: %v", err)
+	}
+	if len(events) != 1 || events[0].InputEvent.Fields["argv_text"] != "env AWS_SECRET_ACCESS_KEY=[REDACTED] /bin/true" {
+		t.Fatalf("audit events = %+v", events)
+	}
+	sessions, err := cruntime.LoadSessionStore(sessionPath)
+	if err != nil {
+		t.Fatalf("LoadSessionStore: %v", err)
+	}
+	if len(sessions.Sessions) != 1 || strings.Contains(strings.Join(sessions.Sessions[0].Command, " "), secret) {
+		t.Fatalf("sessions = %+v", sessions.Sessions)
+	}
+	if sessions.Sessions[0].Subject.Task != "env AWS_SECRET_ACCESS_KEY=[REDACTED] /bin/true" {
+		t.Fatalf("subject task = %q", sessions.Sessions[0].Subject.Task)
+	}
+}
+
 func TestSessionsHeartbeatAndMarkStaleCommands(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.json")
 	now := time.Now().UTC().Add(-time.Hour)

@@ -46,6 +46,8 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	if *agent == "" {
 		return fmt.Errorf("--agent is required")
 	}
+	redactedRest := redactCommandArgs(rest)
+	displayCommand := strings.Join(redactedRest, " ")
 	cfg, err := loadOptionalConfig(*configPath)
 	if err != nil {
 		return err
@@ -106,9 +108,9 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start %s: %w", strings.Join(rest, " "), err)
+		return fmt.Errorf("start %s: %w", displayCommand, err)
 	}
-	subj := subject.NewAgent(*agent, session, absRepo, strings.Join(rest, " "), cmd.Process.Pid)
+	subj := subject.NewAgent(*agent, session, absRepo, displayCommand, cmd.Process.Pid)
 	if cgroup, err := subject.CgroupForPID(cmd.Process.Pid); err == nil {
 		subj.Cgroup = cgroup
 	}
@@ -116,11 +118,11 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	startSession := cruntime.Session{
 		ID:              session,
 		Subject:         subj,
-		Command:         append([]string(nil), rest...),
+		Command:         append([]string(nil), redactedRest...),
 		Policy:          resolvedPolicy,
 		AuditPath:       *auditPath,
 		State:           cruntime.SessionRunning,
-		ProcessTree:     cruntime.NewProcessLifecycleTree(subj, rest, started),
+		ProcessTree:     cruntime.NewProcessLifecycleTree(subj, redactedRest, started),
 		StartedAt:       started,
 		LastHeartbeatAt: started,
 	}
@@ -171,7 +173,7 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if runErr != nil {
-		return fmt.Errorf("run %s: %w", strings.Join(rest, " "), runErr)
+		return fmt.Errorf("run %s: %w", displayCommand, runErr)
 	}
 	return nil
 }
@@ -180,14 +182,15 @@ func syntheticCommandEvents(subj subject.Subject, repo string, argv []string) []
 	if len(argv) == 0 {
 		return nil
 	}
+	redactedArgv := redactCommandArgs(argv)
 	events := []event.Event{
 		{
 			Kind:    event.KindProcessExec,
 			Subject: subj,
 			Fields: map[string]any{
 				"pid":       subj.PID,
-				"comm":      argv[0],
-				"argv_text": strings.Join(argv, " "),
+				"comm":      redactedArgv[0],
+				"argv_text": strings.Join(redactedArgv, " "),
 				"cwd":       repo,
 			},
 		},
@@ -201,6 +204,42 @@ func syntheticCommandEvents(subj subject.Subject, repo string, argv []string) []
 		}
 	}
 	return events
+}
+
+func redactCommandArgs(args []string) []string {
+	out := append([]string(nil), args...)
+	for i, arg := range out {
+		out[i] = redactEnvAssignmentArg(arg)
+	}
+	return out
+}
+
+func redactEnvAssignmentArg(arg string) string {
+	name, _, ok := strings.Cut(arg, "=")
+	if !ok || name == "" || !isEnvName(name) || !sensitiveEnvName(name) {
+		return arg
+	}
+	return name + "=[REDACTED]"
+}
+
+func isEnvName(name string) bool {
+	for i, r := range name {
+		if r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func sensitiveEnvName(name string) bool {
+	upper := strings.ToUpper(name)
+	for _, marker := range []string{"TOKEN", "SECRET", "PASSWORD", "PRIVATE_KEY", "ACCESS_KEY", "API_KEY", "CREDENTIAL", "AUTH", "COOKIE"} {
+		if strings.Contains(upper, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func printAuditLine(w io.Writer, record audit.Event) {
