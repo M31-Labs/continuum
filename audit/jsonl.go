@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
+
+	"m31labs.dev/continuum/internal/statefile"
 )
 
 type JSONLSink struct {
@@ -16,10 +17,7 @@ type JSONLSink struct {
 }
 
 func NewJSONLSink(path string) (*JSONLSink, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return nil, fmt.Errorf("create audit dir: %w", err)
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := statefile.OpenAppend(path)
 	if err != nil {
 		return nil, fmt.Errorf("open audit sink %s: %w", path, err)
 	}
@@ -32,7 +30,10 @@ func (s *JSONLSink) Write(_ context.Context, event Event) error {
 	if s.f == nil {
 		return fmt.Errorf("audit sink is closed")
 	}
-	return json.NewEncoder(s.f).Encode(event)
+	if err := json.NewEncoder(s.f).Encode(event); err != nil {
+		return err
+	}
+	return s.f.Sync()
 }
 
 func (s *JSONLSink) Close() error {
@@ -40,6 +41,11 @@ func (s *JSONLSink) Close() error {
 	defer s.mu.Unlock()
 	if s.f == nil {
 		return nil
+	}
+	if err := s.f.Sync(); err != nil {
+		_ = s.f.Close()
+		s.f = nil
+		return err
 	}
 	err := s.f.Close()
 	s.f = nil

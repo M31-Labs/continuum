@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"sync"
 	"time"
 
+	"m31labs.dev/continuum/internal/statefile"
 	"m31labs.dev/continuum/subject"
 )
 
@@ -44,14 +44,7 @@ func (s *Store) Save(path string) error {
 	if s == nil {
 		return fmt.Errorf("nil airlock store")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("create airlock store dir: %w", err)
-	}
-	data, err := json.MarshalIndent(s.List(), "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0644)
+	return statefile.WriteJSON(path, s.List())
 }
 
 func (s *Store) Enter(id string, subj subject.Subject, reason string, now time.Time) (Session, error) {

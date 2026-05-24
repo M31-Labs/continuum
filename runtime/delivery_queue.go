@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -12,6 +11,7 @@ import (
 
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
+	"m31labs.dev/continuum/internal/statefile"
 )
 
 type DeliveryStatus string
@@ -61,14 +61,7 @@ func (s *DeliveryStore) Save() error {
 	if s == nil {
 		return fmt.Errorf("nil delivery store")
 	}
-	if err := os.MkdirAll(filepath.Dir(s.Path), 0755); err != nil {
-		return fmt.Errorf("create delivery store dir: %w", err)
-	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.Path, append(data, '\n'), 0644)
+	return statefile.WriteJSON(s.Path, s)
 }
 
 func (s *DeliveryStore) Enqueue(item DeliveryItem) (DeliveryItem, error) {

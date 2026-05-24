@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+
+	"m31labs.dev/continuum/internal/statefile"
 )
 
 type GrantStore struct {
@@ -33,14 +34,7 @@ func (s *GrantStore) Save(path string) error {
 	if s == nil {
 		return fmt.Errorf("nil grant store")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("create grant store dir: %w", err)
-	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0644)
+	return statefile.WriteJSON(path, s)
 }
 
 func (s *GrantStore) Add(grant Grant) error {

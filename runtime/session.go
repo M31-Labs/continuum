@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"m31labs.dev/continuum/event"
+	"m31labs.dev/continuum/internal/statefile"
 	"m31labs.dev/continuum/subject"
 )
 
@@ -57,14 +57,7 @@ func (s *SessionStore) Save(path string) error {
 	if s == nil {
 		return fmt.Errorf("nil session store")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("create session store dir: %w", err)
-	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0644)
+	return statefile.WriteJSON(path, s)
 }
 
 func (s *SessionStore) Upsert(session Session) {

@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
+
+	"m31labs.dev/continuum/internal/statefile"
 )
 
 type Store struct {
@@ -45,14 +46,7 @@ func (s *Store) Save() error {
 	if s == nil {
 		return fmt.Errorf("nil policy store")
 	}
-	if err := os.MkdirAll(filepath.Dir(s.Path), 0755); err != nil {
-		return fmt.Errorf("create policy store dir: %w", err)
-	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.Path, append(data, '\n'), 0644)
+	return statefile.WriteJSON(s.Path, s)
 }
 
 func (s *Store) Publish(bundle Bundle, now time.Time) error {

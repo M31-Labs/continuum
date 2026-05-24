@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -37,6 +38,36 @@ func TestJSONLWriteReadFind(t *testing.T) {
 	got, ok := Find(events, "evt_123")
 	if !ok || got.Decision != "deny" {
 		t.Fatalf("Find = %+v, %v", got, ok)
+	}
+}
+
+func TestJSONLSinkAppendsAndUsesPrivateMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	for _, id := range []string{"evt_1", "evt_2"} {
+		sink, err := NewJSONLSink(path)
+		if err != nil {
+			t.Fatalf("NewJSONLSink: %v", err)
+		}
+		if err := sink.Write(context.Background(), Event{ID: id, Time: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)}); err != nil {
+			t.Fatalf("Write %s: %v", id, err)
+		}
+		if err := sink.Close(); err != nil {
+			t.Fatalf("Close %s: %v", id, err)
+		}
+	}
+	events, err := ReadJSONL(path)
+	if err != nil {
+		t.Fatalf("ReadJSONL: %v", err)
+	}
+	if len(events) != 2 || events[0].ID != "evt_1" || events[1].ID != "evt_2" {
+		t.Fatalf("events = %+v", events)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Fatalf("mode = %v", got)
 	}
 }
 
