@@ -46,6 +46,27 @@ func TestNormalizeProcessExecUsesEventPID(t *testing.T) {
 	}
 }
 
+func TestNormalizeBehaviorSummary(t *testing.T) {
+	evt := Event{
+		Kind: KindBehaviorSummary,
+		Fields: map[string]any{
+			"subject":                "process-tree:demo",
+			"exec_count":             21,
+			"unique_network_targets": 51,
+			"touched_secret_paths":   0,
+			"rewritten_files":        4,
+			"entropy_increase_score": 0.2,
+		},
+	}
+	facts := Normalize(evt)
+	if len(facts) != 1 || facts[0].Type != arbiterx.FactBehavior {
+		t.Fatalf("facts = %+v", facts)
+	}
+	if facts[0].Fields["subject"] != "process-tree:demo" || facts[0].Fields["unique_network_targets"] != 51 {
+		t.Fatalf("behavior fields = %+v", facts[0].Fields)
+	}
+}
+
 func TestNormalizeFileSecretGolden(t *testing.T) {
 	evt := testutil.ReadJSON[Event](t, "../testdata/events/file_secret_access.json")
 	testutil.EqualGoldenJSON(t, "../testdata/golden/file_secret_access_facts.json", Normalize(evt))

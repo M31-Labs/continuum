@@ -668,6 +668,38 @@ func TestReplayDiffCommand(t *testing.T) {
 	}
 }
 
+func TestReplayAirlockReviewFixtures(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if err := run([]string{
+		"replay",
+		"--policy", "../../examples/airlock/policies/main.arb",
+		"--events", "../../testdata/events/airlock_false_positive_review.json",
+	}, &out, &errOut); err != nil {
+		t.Fatalf("replay false positive fixtures: %v\nstderr=%s", err, errOut.String())
+	}
+	if strings.Contains(out.String(), "enter_airlock") {
+		t.Fatalf("false-positive replay entered airlock: %q", out.String())
+	}
+	for _, want := range []string{"evt_airlock_fp_package_install", "evt_airlock_fp_bulk_formatter", "audit"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("false-positive replay output missing %q: %q", want, out.String())
+		}
+	}
+	out.Reset()
+	if err := run([]string{
+		"replay",
+		"--policy", "../../examples/airlock/policies/main.arb",
+		"--events", "../../testdata/events/airlock_true_positive_review.json",
+	}, &out, &errOut); err != nil {
+		t.Fatalf("replay true positive fixtures: %v\nstderr=%s", err, errOut.String())
+	}
+	for _, want := range []string{"evt_airlock_tp_worm_fanout", "evt_airlock_tp_ransomware_rewrite", "enter_airlock"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("true-positive replay output missing %q: %q", want, out.String())
+		}
+	}
+}
+
 func TestRunCommandAuditsSyntheticProcess(t *testing.T) {
 	dir := t.TempDir()
 	auditPath := filepath.Join(dir, "audit.jsonl")

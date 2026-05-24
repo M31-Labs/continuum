@@ -1,0 +1,28 @@
+[
+  {
+    "id": "evt_airlock_tp_worm_fanout",
+    "source": "fixture.true_positive",
+    "kind": "behavior.summary",
+    "fields": {
+      "subject": "process-tree:worm-fanout",
+      "exec_count": 42,
+      "unique_network_targets": 88,
+      "touched_secret_paths": 0,
+      "rewritten_files": 4,
+      "entropy_increase_score": 0.1
+    }
+  },
+  {
+    "id": "evt_airlock_tp_ransomware_rewrite",
+    "source": "fixture.true_positive",
+    "kind": "behavior.summary",
+    "fields": {
+      "subject": "process-tree:ransomware-rewrite",
+      "exec_count": 8,
+      "unique_network_targets": 2,
+      "touched_secret_paths": 3,
+      "rewritten_files": 250,
+      "entropy_increase_score": 0.93
+    }
+  }
+]

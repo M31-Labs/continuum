@@ -1,0 +1,54 @@
+[
+  {
+    "id": "evt_airlock_fp_package_install",
+    "source": "fixture.false_positive",
+    "kind": "behavior.summary",
+    "fields": {
+      "subject": "process-tree:package-install",
+      "exec_count": 30,
+      "unique_network_targets": 45,
+      "touched_secret_paths": 0,
+      "rewritten_files": 8,
+      "entropy_increase_score": 0.12
+    }
+  },
+  {
+    "id": "evt_airlock_fp_bulk_formatter",
+    "source": "fixture.false_positive",
+    "kind": "behavior.summary",
+    "fields": {
+      "subject": "process-tree:bulk-formatter",
+      "exec_count": 7,
+      "unique_network_targets": 0,
+      "touched_secret_paths": 0,
+      "rewritten_files": 160,
+      "entropy_increase_score": 0.24
+    }
+  },
+  {
+    "id": "evt_airlock_fp_secret_scan",
+    "source": "fixture.false_positive",
+    "kind": "behavior.summary",
+    "fields": {
+      "subject": "process-tree:secret-scan",
+      "exec_count": 12,
+      "unique_network_targets": 2,
+      "touched_secret_paths": 14,
+      "rewritten_files": 0,
+      "entropy_increase_score": 0.0
+    }
+  },
+  {
+    "id": "evt_airlock_fp_threshold_edges",
+    "source": "fixture.false_positive",
+    "kind": "behavior.summary",
+    "fields": {
+      "subject": "process-tree:threshold-edges",
+      "exec_count": 20,
+      "unique_network_targets": 50,
+      "touched_secret_paths": 0,
+      "rewritten_files": 100,
+      "entropy_increase_score": 0.8
+    }
+  }
+]

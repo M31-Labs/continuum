@@ -36,6 +36,19 @@ func Normalize(evt Event) []arbiterx.Fact {
 			"cwd":           stringField(evt.Fields, "cwd"),
 			"agent_session": evt.Subject.Session,
 		}))
+	case KindBehaviorSummary:
+		subjectValue := stringField(evt.Fields, "subject")
+		if subjectValue == "" {
+			subjectValue = evt.Subject.String()
+		}
+		facts = append(facts, arbiterx.NewFact(arbiterx.FactBehavior, evt.Subject, map[string]any{
+			"subject":                subjectValue,
+			"exec_count":             numberField(evt.Fields, "exec_count"),
+			"unique_network_targets": numberField(evt.Fields, "unique_network_targets"),
+			"touched_secret_paths":   numberField(evt.Fields, "touched_secret_paths"),
+			"rewritten_files":        numberField(evt.Fields, "rewritten_files"),
+			"entropy_increase_score": floatNumberField(evt.Fields, "entropy_increase_score"),
+		}))
 	}
 	return facts
 }
@@ -60,6 +73,21 @@ func numberField(fields map[string]any, key string) int {
 		return int(v)
 	case float64:
 		return int(v)
+	default:
+		return 0
+	}
+}
+
+func floatNumberField(fields map[string]any, key string) float64 {
+	switch v := fields[key].(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
 	default:
 		return 0
 	}
