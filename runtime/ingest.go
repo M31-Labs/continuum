@@ -100,18 +100,12 @@ func IngestEvents(ctx context.Context, events []event.Event, opts IngestOptions)
 	}
 	processEvents := 0
 	if opts.SessionStore != "" {
-		sessions, err := LoadSessionStore(opts.SessionStore)
-		if err != nil {
+		if err := UpdateSessionStore(opts.SessionStore, func(sessions *SessionStore) error {
+			var err error
+			processEvents, err = sessions.TrackProcessEvents(events, engine.now)
+			return err
+		}); err != nil {
 			return IngestResult{}, err
-		}
-		processEvents, err = sessions.TrackProcessEvents(events, engine.now)
-		if err != nil {
-			return IngestResult{}, err
-		}
-		if processEvents > 0 {
-			if err := sessions.Save(opts.SessionStore); err != nil {
-				return IngestResult{}, err
-			}
 		}
 	}
 	if err := sink.Close(); err != nil {
@@ -228,14 +222,15 @@ func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts Ai
 	if opts.NewID != nil {
 		engine.NewID = opts.NewID
 	}
-	var store *airlock.Store
-	if opts.StorePath != "" {
-		store, err = airlock.LoadStore(opts.StorePath)
-		if err != nil {
-			return nil, err
-		}
-	}
 	results := make([]AirlockResult, 0, len(candidates))
+	type airlockEntry struct {
+		index    int
+		id       string
+		subject  subject.Subject
+		reason   string
+		observed time.Time
+	}
+	var entries []airlockEntry
 	for i, behavior := range candidates {
 		now := engine.now()
 		input := event.Event{
@@ -255,17 +250,28 @@ func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts Ai
 			return nil, err
 		}
 		result := AirlockResult{Behavior: behavior, Record: record, Decision: decision}
-		if decision.Selected != nil && decision.Selected.Name == arbiterx.OutcomeEnterAirlock && store != nil {
-			session, err := store.Enter(fmt.Sprintf("airlock-%d-%d", now.UnixNano(), i), subject.NewProcessTree(behavior.Subject, 0), decision.Selected.Reason(), now)
-			if err != nil {
-				return nil, err
-			}
-			result.Session = &session
+		if decision.Selected != nil && decision.Selected.Name == arbiterx.OutcomeEnterAirlock && opts.StorePath != "" {
+			entries = append(entries, airlockEntry{
+				index:    len(results),
+				id:       fmt.Sprintf("airlock-%d-%d", now.UnixNano(), i),
+				subject:  subject.NewProcessTree(behavior.Subject, 0),
+				reason:   decision.Selected.Reason(),
+				observed: now,
+			})
 		}
 		results = append(results, result)
 	}
-	if store != nil {
-		if err := store.Save(opts.StorePath); err != nil {
+	if len(entries) > 0 {
+		if err := airlock.UpdateStore(opts.StorePath, func(store *airlock.Store) error {
+			for _, entry := range entries {
+				session, err := store.Enter(entry.id, entry.subject, entry.reason, entry.observed)
+				if err != nil {
+					return err
+				}
+				results[entry.index].Session = &session
+			}
+			return nil
+		}); err != nil {
 			return nil, err
 		}
 	}

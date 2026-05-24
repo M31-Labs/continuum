@@ -100,7 +100,7 @@ func (e *Engine) enqueueDelivery(record audit.Event, evt event.Event, outcome ar
 	if e == nil || e.Queue == nil {
 		return DeliveryItem{}, nil
 	}
-	item, err := e.Queue.Enqueue(DeliveryItem{
+	item := DeliveryItem{
 		AuditID:     record.ID,
 		EventID:     evt.ID,
 		Capability:  record.Capability,
@@ -109,7 +109,20 @@ func (e *Engine) enqueueDelivery(record audit.Event, evt event.Event, outcome ar
 		Status:      DeliveryPending,
 		CreatedAt:   e.now(),
 		UpdatedAt:   e.now(),
-	})
+	}
+	if e.Queue.Path != "" {
+		var enqueued DeliveryItem
+		err := UpdateDeliveryStore(e.Queue.Path, func(queue *DeliveryStore) error {
+			var err error
+			enqueued, err = queue.Enqueue(item)
+			if err == nil {
+				e.Queue = queue
+			}
+			return err
+		})
+		return enqueued, err
+	}
+	item, err := e.Queue.Enqueue(item)
 	if err != nil {
 		return DeliveryItem{}, err
 	}
@@ -122,6 +135,15 @@ func (e *Engine) enqueueDelivery(record audit.Event, evt event.Event, outcome ar
 func (e *Engine) recordDeliveryAttempt(id string, attempt audit.DeliveryAttempt) error {
 	if e == nil || e.Queue == nil {
 		return nil
+	}
+	if e.Queue.Path != "" {
+		return UpdateDeliveryStore(e.Queue.Path, func(queue *DeliveryStore) error {
+			if _, err := queue.RecordAttempt(id, attempt); err != nil {
+				return err
+			}
+			e.Queue = queue
+			return nil
+		})
 	}
 	if _, err := e.Queue.RecordAttempt(id, attempt); err != nil {
 		return err

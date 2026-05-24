@@ -49,6 +49,22 @@ func (s *Store) Save() error {
 	return statefile.WriteJSON(s.Path, s)
 }
 
+func UpdateStore(path string, mutate func(*Store) error) error {
+	if mutate == nil {
+		return fmt.Errorf("policy store mutation callback is required")
+	}
+	return statefile.WithLock(path, func() error {
+		store, err := LoadStore(path)
+		if err != nil {
+			return err
+		}
+		if err := mutate(store); err != nil {
+			return err
+		}
+		return statefile.WriteJSONWithoutLock(path, store)
+	})
+}
+
 func (s *Store) Publish(bundle Bundle, now time.Time) error {
 	if err := bundle.Validate(); err != nil {
 		return err

@@ -54,14 +54,9 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		store, err := policy.LoadStore(*storePath)
-		if err != nil {
-			return err
-		}
-		if err := store.Publish(bundle, time.Now().UTC()); err != nil {
-			return err
-		}
-		if err := store.Save(); err != nil {
+		if err := policy.UpdateStore(*storePath, func(store *policy.Store) error {
+			return store.Publish(bundle, time.Now().UTC())
+		}); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "published policy name=%s id=%s kind=%s path=%s store=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, fs.Arg(0), *storePath)
@@ -82,14 +77,9 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		*storePath = resolvePolicyStorePath(*storePath, cfg)
-		store, err := policy.LoadStore(*storePath)
-		if err != nil {
-			return err
-		}
-		if err := store.Activate(fs.Arg(0)); err != nil {
-			return err
-		}
-		if err := store.Save(); err != nil {
+		if err := policy.UpdateStore(*storePath, func(store *policy.Store) error {
+			return store.Activate(fs.Arg(0))
+		}); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "activated policy name=%s store=%s\n", fs.Arg(0), *storePath)

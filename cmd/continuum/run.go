@@ -102,14 +102,8 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	if cgroup, err := subject.CgroupForPID(cmd.Process.Pid); err == nil {
 		subj.Cgroup = cgroup
 	}
-	sessions, err := cruntime.LoadSessionStore(*sessionPath)
-	if err != nil {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
-		return err
-	}
 	started := time.Now().UTC()
-	sessions.Upsert(cruntime.Session{
+	startSession := cruntime.Session{
 		ID:          session,
 		Subject:     subj,
 		Command:     append([]string(nil), rest...),
@@ -118,23 +112,23 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 		State:       cruntime.SessionRunning,
 		ProcessTree: cruntime.NewProcessLifecycleTree(subj, rest, started),
 		StartedAt:   started,
-	})
-	if err := sessions.Save(*sessionPath); err != nil {
+	}
+	if err := cruntime.UpdateSessionStore(*sessionPath, func(sessions *cruntime.SessionStore) error {
+		sessions.Upsert(startSession)
+		return nil
+	}); err != nil {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 		return err
 	}
 	for _, evt := range syntheticCommandEvents(subj, absRepo, rest) {
-		if _, changed, err := sessions.TrackProcessEvent(evt, time.Now().UTC()); err != nil {
+		if err := cruntime.UpdateSessionStore(*sessionPath, func(sessions *cruntime.SessionStore) error {
+			_, _, err := sessions.TrackProcessEvent(evt, time.Now().UTC())
+			return err
+		}); err != nil {
 			_ = cmd.Process.Kill()
 			_, _ = cmd.Process.Wait()
 			return err
-		} else if changed {
-			if err := sessions.Save(*sessionPath); err != nil {
-				_ = cmd.Process.Kill()
-				_, _ = cmd.Process.Wait()
-				return err
-			}
 		}
 		record, _, err := engine.DecideEvent(context.Background(), evt)
 		if err != nil {
@@ -159,10 +153,10 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	if runErr != nil {
 		state = cruntime.SessionFailed
 	}
-	if _, err := sessions.Finish(session, state, exitCode, time.Now().UTC()); err != nil {
+	if err := cruntime.UpdateSessionStore(*sessionPath, func(sessions *cruntime.SessionStore) error {
+		_, err := sessions.Finish(session, state, exitCode, time.Now().UTC())
 		return err
-	}
-	if err := sessions.Save(*sessionPath); err != nil {
+	}); err != nil {
 		return err
 	}
 	if runErr != nil {

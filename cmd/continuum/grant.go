@@ -62,14 +62,9 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 		CreatedAt:  now,
 		ExpiresAt:  now.Add(*ttl),
 	}
-	store, err := capability.LoadGrantStore(*storePath)
-	if err != nil {
-		return err
-	}
-	if err := store.Add(grant); err != nil {
-		return err
-	}
-	if err := store.Save(*storePath); err != nil {
+	if err := capability.UpdateGrantStore(*storePath, func(store *capability.GrantStore) error {
+		return store.Add(grant)
+	}); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "grant id=%s session=%s capability=%s expires=%s reason=%q store=%s\n", grant.ID, grant.Session, grant.Capability, grant.ExpiresAt.Format(time.RFC3339), grant.Reason, *storePath)
@@ -186,15 +181,12 @@ func runGrantRevoke(args []string, stdout, stderr io.Writer) error {
 	}
 	*storePath = resolveGrantStorePath(*storePath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
-	store, err := capability.LoadGrantStore(*storePath)
-	if err != nil {
+	var grant capability.Grant
+	if err := capability.UpdateGrantStore(*storePath, func(store *capability.GrantStore) error {
+		var err error
+		grant, err = store.Revoke(fs.Arg(0), time.Now().UTC())
 		return err
-	}
-	grant, err := store.Revoke(fs.Arg(0), time.Now().UTC())
-	if err != nil {
-		return err
-	}
-	if err := store.Save(*storePath); err != nil {
+	}); err != nil {
 		return err
 	}
 	delivery, err := cruntime.EnqueueGrantRevocation(*deliveryPath, grant, "grant revoked", grant.RevokedAt)
@@ -220,19 +212,19 @@ func runGrantPrune(args []string, stdout, stderr io.Writer) error {
 	}
 	*storePath = resolveGrantStorePath(*storePath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
-	store, err := capability.LoadGrantStore(*storePath)
-	if err != nil {
-		return err
-	}
 	now := time.Now().UTC()
-	expired := store.Expired(now)
-	for _, grant := range expired {
-		if _, err := cruntime.EnqueueGrantRevocation(*deliveryPath, grant, "grant expired", now); err != nil {
-			return err
+	var expired []capability.Grant
+	var removed int
+	if err := capability.UpdateGrantStore(*storePath, func(store *capability.GrantStore) error {
+		expired = store.Expired(now)
+		for _, grant := range expired {
+			if _, err := cruntime.EnqueueGrantRevocation(*deliveryPath, grant, "grant expired", now); err != nil {
+				return err
+			}
 		}
-	}
-	removed := store.PruneExpired(now)
-	if err := store.Save(*storePath); err != nil {
+		removed = store.PruneExpired(now)
+		return nil
+	}); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "pruned grants removed=%d\n", removed)

@@ -60,6 +60,51 @@ func TestGrantStorePersistsAndFilters(t *testing.T) {
 	}
 }
 
+func TestUpdateGrantStoreSerializesMutations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "grants.json")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- UpdateGrantStore(path, func(store *GrantStore) error {
+			if err := store.Add(Grant{ID: "grant_1", Session: "s1", Capability: "network.connect"}); err != nil {
+				return err
+			}
+			close(started)
+			<-release
+			return nil
+		})
+	}()
+	<-started
+
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- UpdateGrantStore(path, func(store *GrantStore) error {
+			return store.Add(Grant{ID: "grant_2", Session: "s2", Capability: "file.read"})
+		})
+	}()
+
+	select {
+	case err := <-secondDone:
+		t.Fatalf("second update completed while first held lock: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second update: %v", err)
+	}
+	reloaded, err := LoadGrantStore(path)
+	if err != nil {
+		t.Fatalf("LoadGrantStore: %v", err)
+	}
+	if len(reloaded.Grants) != 2 {
+		t.Fatalf("grants = %+v", reloaded.Grants)
+	}
+}
+
 func TestGrantFactAndNetworkMatch(t *testing.T) {
 	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
 	grant := Grant{

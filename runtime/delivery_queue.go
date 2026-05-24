@@ -64,6 +64,22 @@ func (s *DeliveryStore) Save() error {
 	return statefile.WriteJSON(s.Path, s)
 }
 
+func UpdateDeliveryStore(path string, mutate func(*DeliveryStore) error) error {
+	if mutate == nil {
+		return fmt.Errorf("delivery store mutation callback is required")
+	}
+	return statefile.WithLock(path, func() error {
+		store, err := LoadDeliveryStore(path)
+		if err != nil {
+			return err
+		}
+		if err := mutate(store); err != nil {
+			return err
+		}
+		return statefile.WriteJSONWithoutLock(path, store)
+	})
+}
+
 func (s *DeliveryStore) Enqueue(item DeliveryItem) (DeliveryItem, error) {
 	if s == nil {
 		return DeliveryItem{}, fmt.Errorf("nil delivery store")

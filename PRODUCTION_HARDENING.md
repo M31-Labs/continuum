@@ -18,7 +18,7 @@ enforcement backends exist and are reviewed.
 - [x] Fsync audit writes before acknowledging decisions.
 - [x] Add tests for atomic JSON state writes.
 - [x] Add tests for audit durability and append behavior.
-- [ ] Add cross-process file locking around JSON state mutation.
+- [x] Add cross-process file locking around JSON state mutation.
 - [ ] Add corrupt-store recovery diagnostics that preserve the bad file.
 - [ ] Add bounded retention/compaction for delivery, session, and audit state.
 - [ ] Add state schema versions and migration hooks.

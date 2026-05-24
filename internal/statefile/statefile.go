@@ -13,18 +13,46 @@ const (
 )
 
 func WriteJSON(path string, value any) error {
+	return WithLock(path, func() error {
+		return WriteJSONWithoutLock(path, value)
+	})
+}
+
+// WriteJSONWithoutLock writes JSON using the atomic state-file protocol.
+// Callers must already hold WithLock(path).
+func WriteJSONWithoutLock(path string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
-	return Write(path, append(data, '\n'))
+	return WriteWithoutLock(path, append(data, '\n'))
 }
 
 func Write(path string, data []byte) error {
-	return WriteMode(path, data, FileMode)
+	return WithLock(path, func() error {
+		return WriteWithoutLock(path, data)
+	})
+}
+
+// WriteWithoutLock writes bytes using the atomic state-file protocol.
+// Callers must already hold WithLock(path).
+func WriteWithoutLock(path string, data []byte) error {
+	return WriteModeWithoutLock(path, data, FileMode)
 }
 
 func WriteMode(path string, data []byte, mode os.FileMode) error {
+	return WithLock(path, func() error {
+		return writeModeWithoutLock(path, data, mode)
+	})
+}
+
+// WriteModeWithoutLock writes bytes with a custom mode using the atomic
+// state-file protocol. Callers must already hold WithLock(path).
+func WriteModeWithoutLock(path string, data []byte, mode os.FileMode) error {
+	return writeModeWithoutLock(path, data, mode)
+}
+
+func writeModeWithoutLock(path string, data []byte, mode os.FileMode) error {
 	if path == "" {
 		return fmt.Errorf("state file path is required")
 	}

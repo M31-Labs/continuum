@@ -37,6 +37,22 @@ func (s *GrantStore) Save(path string) error {
 	return statefile.WriteJSON(path, s)
 }
 
+func UpdateGrantStore(path string, mutate func(*GrantStore) error) error {
+	if mutate == nil {
+		return fmt.Errorf("grant store mutation callback is required")
+	}
+	return statefile.WithLock(path, func() error {
+		store, err := LoadGrantStore(path)
+		if err != nil {
+			return err
+		}
+		if err := mutate(store); err != nil {
+			return err
+		}
+		return statefile.WriteJSONWithoutLock(path, store)
+	})
+}
+
 func (s *GrantStore) Add(grant Grant) error {
 	if grant.ID == "" {
 		return fmt.Errorf("grant id is required")

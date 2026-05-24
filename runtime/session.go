@@ -60,6 +60,22 @@ func (s *SessionStore) Save(path string) error {
 	return statefile.WriteJSON(path, s)
 }
 
+func UpdateSessionStore(path string, mutate func(*SessionStore) error) error {
+	if mutate == nil {
+		return fmt.Errorf("session store mutation callback is required")
+	}
+	return statefile.WithLock(path, func() error {
+		store, err := LoadSessionStore(path)
+		if err != nil {
+			return err
+		}
+		if err := mutate(store); err != nil {
+			return err
+		}
+		return statefile.WriteJSONWithoutLock(path, store)
+	})
+}
+
 func (s *SessionStore) Upsert(session Session) {
 	for i := range s.Sessions {
 		if s.Sessions[i].ID == session.ID {

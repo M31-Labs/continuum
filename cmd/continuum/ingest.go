@@ -126,18 +126,12 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	processEvents := 0
-	sessions, err := cruntime.LoadSessionStore(*sessionPath)
-	if err != nil {
+	if err := cruntime.UpdateSessionStore(*sessionPath, func(sessions *cruntime.SessionStore) error {
+		var err error
+		processEvents, err = sessions.TrackProcessEvents(events, func() time.Time { return time.Now().UTC() })
 		return err
-	}
-	processEvents, err = sessions.TrackProcessEvents(events, func() time.Time { return time.Now().UTC() })
-	if err != nil {
+	}); err != nil {
 		return err
-	}
-	if processEvents > 0 {
-		if err := sessions.Save(*sessionPath); err != nil {
-			return err
-		}
 	}
 	if !*noAirlock {
 		airlocks, err := cruntime.EvaluateAirlockForEvents(context.Background(), events, cruntime.AirlockOptions{

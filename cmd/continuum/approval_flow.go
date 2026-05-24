@@ -49,14 +49,9 @@ func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, re
 		return nil
 	}
 	grant := approvalGrant(evt, record.Outcome, resp.Reason, time.Now().UTC())
-	store, err := capability.LoadGrantStore(grantStorePath)
-	if err != nil {
-		return err
-	}
-	if err := store.Add(grant); err != nil {
-		return err
-	}
-	if err := store.Save(grantStorePath); err != nil {
+	if err := capability.UpdateGrantStore(grantStorePath, func(store *capability.GrantStore) error {
+		return store.Add(grant)
+	}); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "approval=granted grant=%s session=%s capability=%s\n", grant.ID, grant.Session, grant.Capability)

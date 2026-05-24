@@ -59,16 +59,13 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		*storePath = resolveAirlockStorePath(*storePath, cfg)
-		store, err := airlock.LoadStore(*storePath)
-		if err != nil {
-			return err
-		}
 		id := fmt.Sprintf("airlock-%d", time.Now().UnixNano())
-		session, err := store.Enter(id, subject.NewProcessTree("manual", *pid), *reason, time.Now().UTC())
-		if err != nil {
+		var session airlock.Session
+		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
+			var err error
+			session, err = store.Enter(id, subject.NewProcessTree("manual", *pid), *reason, time.Now().UTC())
 			return err
-		}
-		if err := store.Save(*storePath); err != nil {
+		}); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "ENTER_AIRLOCK session=%s subject=%s state=%s reason=%q\n", session.ID, session.Subject.String(), session.State, session.Reason)
@@ -90,15 +87,12 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		*storePath = resolveAirlockStorePath(*storePath, cfg)
-		store, err := airlock.LoadStore(*storePath)
-		if err != nil {
+		var session airlock.Session
+		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
+			var err error
+			session, err = store.Release(fs.Arg(0), *reason, time.Now().UTC())
 			return err
-		}
-		session, err := store.Release(fs.Arg(0), *reason, time.Now().UTC())
-		if err != nil {
-			return err
-		}
-		if err := store.Save(*storePath); err != nil {
+		}); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "RELEASE_AIRLOCK session=%s state=%s reason=%q\n", session.ID, session.State, session.Reason)
@@ -157,15 +151,12 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintln(stdout, "NO_AIRLOCK")
 			return nil
 		}
-		store, err := airlock.LoadStore(*storePath)
-		if err != nil {
+		var session airlock.Session
+		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
+			var err error
+			session, err = store.Enter("airlock-sim", subject.NewProcessTree(behavior.Subject, 0), decision.Selected.Reason(), time.Now().UTC())
 			return err
-		}
-		session, err := store.Enter("airlock-sim", subject.NewProcessTree(behavior.Subject, 0), decision.Selected.Reason(), time.Now().UTC())
-		if err != nil {
-			return err
-		}
-		if err := store.Save(*storePath); err != nil {
+		}); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s\nreason=%q\nstate=%s\naudit=%s\n", behavior.Subject, session.Reason, session.State, record.ID)
@@ -215,15 +206,12 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintf(stdout, "NO_AIRLOCK subject=%s exec_count=%d unique_network_targets=%d rewritten_files=%d audit=%s\n", behavior.Subject, behavior.ExecCount, behavior.UniqueNetworkTargets, behavior.RewrittenFiles, record.ID)
 			return nil
 		}
-		store, err := airlock.LoadStore(*storePath)
-		if err != nil {
+		var session airlock.Session
+		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
+			var err error
+			session, err = store.Enter(fmt.Sprintf("airlock-%d", time.Now().UnixNano()), subject.NewProcessTree(behavior.Subject, 0), decision.Selected.Reason(), time.Now().UTC())
 			return err
-		}
-		session, err := store.Enter(fmt.Sprintf("airlock-%d", time.Now().UnixNano()), subject.NewProcessTree(behavior.Subject, 0), decision.Selected.Reason(), time.Now().UTC())
-		if err != nil {
-			return err
-		}
-		if err := store.Save(*storePath); err != nil {
+		}); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s\nreason=%q\nstate=%s\naudit=%s\n", behavior.Subject, session.Reason, session.State, record.ID)

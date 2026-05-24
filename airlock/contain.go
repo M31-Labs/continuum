@@ -47,6 +47,22 @@ func (s *Store) Save(path string) error {
 	return statefile.WriteJSON(path, s.List())
 }
 
+func UpdateStore(path string, mutate func(*Store) error) error {
+	if mutate == nil {
+		return fmt.Errorf("airlock store mutation callback is required")
+	}
+	return statefile.WithLock(path, func() error {
+		store, err := LoadStore(path)
+		if err != nil {
+			return err
+		}
+		if err := mutate(store); err != nil {
+			return err
+		}
+		return statefile.WriteJSONWithoutLock(path, store.List())
+	})
+}
+
 func (s *Store) Enter(id string, subj subject.Subject, reason string, now time.Time) (Session, error) {
 	if id == "" {
 		return Session{}, fmt.Errorf("airlock session id is required")

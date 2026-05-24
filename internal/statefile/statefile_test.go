@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 )
 
 func TestWriteJSONIsAtomicAndPrivate(t *testing.T) {
@@ -45,7 +47,9 @@ func TestWriteJSONIsAtomicAndPrivate(t *testing.T) {
 		t.Fatalf("ReadDir: %v", err)
 	}
 	for _, entry := range entries {
-		if entry.Name() != "store.json" {
+		switch entry.Name() {
+		case "store.json", ".store.json.lock":
+		default:
 			t.Fatalf("unexpected temp file left behind: %s", entry.Name())
 		}
 	}
@@ -87,5 +91,46 @@ func TestWriteTightensExistingStateDir(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != DirMode {
 		t.Fatalf("dir mode = %v, want %v", got, DirMode)
+	}
+}
+
+func TestWithLockSerializesStateWrites(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("state file locking is advisory on unix-like targets only")
+	}
+	path := filepath.Join(t.TempDir(), "state", "store.json")
+	locked := make(chan struct{})
+	release := make(chan struct{})
+	heldDone := make(chan error, 1)
+	go func() {
+		heldDone <- WithLock(path, func() error {
+			close(locked)
+			<-release
+			return nil
+		})
+	}()
+	<-locked
+
+	writeDone := make(chan error, 1)
+	go func() {
+		writeDone <- WriteJSON(path, map[string]string{"value": "after"})
+	}()
+
+	select {
+	case err := <-writeDone:
+		t.Fatalf("WriteJSON completed while lock was held: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-heldDone; err != nil {
+		t.Fatalf("WithLock: %v", err)
+	}
+	select {
+	case err := <-writeDone:
+		if err != nil {
+			t.Fatalf("WriteJSON: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WriteJSON did not complete after lock release")
 	}
 }
