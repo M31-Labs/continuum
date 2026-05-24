@@ -126,13 +126,31 @@ func (s *Store) Enter(id string, subj subject.Subject, reason string, now time.T
 }
 
 func (s *Store) Release(id string, reason string, now time.Time) (Session, error) {
+	return s.transition(id, StateReleased, reason, now)
+}
+
+func (s *Store) Remediate(id string, reason string, now time.Time) (Session, error) {
+	return s.transition(id, StateRemediated, reason, now)
+}
+
+func (s *Store) Get(id string) (Session, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[id]
+	if !ok {
+		return Session{}, false
+	}
+	return session, true
+}
+
+func (s *Store) transition(id string, next State, reason string, now time.Time) (Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, ok := s.sessions[id]
 	if !ok {
 		return Session{}, fmt.Errorf("airlock session %q not found", id)
 	}
-	if err := session.Transition(StateReleased, reason, now); err != nil {
+	if err := session.Transition(next, reason, now); err != nil {
 		return Session{}, err
 	}
 	s.sessions[id] = session

@@ -989,6 +989,51 @@ func TestAirlockCommandPersistsState(t *testing.T) {
 	}
 }
 
+func TestAirlockReleaseAndRemediateWriteAuditEvents(t *testing.T) {
+	dir := t.TempDir()
+	store := filepath.Join(dir, "airlock.json")
+	auditPath := filepath.Join(dir, "audit.jsonl")
+	idStore := filepath.Join(dir, "ids.json")
+	var out, errOut bytes.Buffer
+	if err := run([]string{"airlock", "enter", "--store", store, "--id-store", idStore, "--pid", "1234", "--reason", "test"}, &out, &errOut); err != nil {
+		t.Fatalf("airlock enter release target: %v", err)
+	}
+	releaseSession := outputField(out.String(), "session")
+	out.Reset()
+	if err := run([]string{"airlock", "release", "--store", store, "--audit", auditPath, "--id-store", idStore, "--reason", "operator verified", releaseSession}, &out, &errOut); err != nil {
+		t.Fatalf("airlock release: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "RELEASE_AIRLOCK") || !strings.Contains(out.String(), "audit=evt_airlock_1") {
+		t.Fatalf("release output = %q", out.String())
+	}
+
+	out.Reset()
+	if err := run([]string{"airlock", "enter", "--store", store, "--id-store", idStore, "--pid", "5678", "--reason", "test"}, &out, &errOut); err != nil {
+		t.Fatalf("airlock enter remediation target: %v", err)
+	}
+	remediateSession := outputField(out.String(), "session")
+	out.Reset()
+	if err := run([]string{"airlock", "remediate", "--store", store, "--audit", auditPath, "--id-store", idStore, "--reason", "patched and isolated", remediateSession}, &out, &errOut); err != nil {
+		t.Fatalf("airlock remediate: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "REMEDIATE_AIRLOCK") || !strings.Contains(out.String(), "audit=evt_airlock_2") {
+		t.Fatalf("remediate output = %q", out.String())
+	}
+
+	events, err := audit.ReadJSONL(auditPath)
+	if err != nil {
+		t.Fatalf("ReadJSONL: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("audit events = %+v", events)
+	}
+	assertAirlockTransitionAudit(t, events[0], "AirlockRelease", "release_airlock", "airlock.release", "continuum.airlock.release", "airlocked", "released", "operator verified")
+	assertAirlockTransitionAudit(t, events[1], "AirlockRemediation", "remediate_airlock", "airlock.remediate", "continuum.airlock.remediate", "airlocked", "remediated", "patched and isolated")
+	if events[0].ChainHash == "" || events[1].ChainHash == "" || events[1].ChainPrev != events[0].ChainHash {
+		t.Fatalf("audit chain not linked: first=%+v second=%+v", events[0], events[1])
+	}
+}
+
 func TestAirlockAccumulateCommandEntersAirlock(t *testing.T) {
 	dir := t.TempDir()
 	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 1234)
@@ -1023,6 +1068,41 @@ func TestAirlockAccumulateCommandEntersAirlock(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ENTER_AIRLOCK") || !strings.Contains(out.String(), "worm-like process/network fanout") {
 		t.Fatalf("accumulate output = %q", out.String())
+	}
+}
+
+func outputField(output, name string) string {
+	prefix := name + "="
+	for _, field := range strings.Fields(output) {
+		if strings.HasPrefix(field, prefix) {
+			return strings.Trim(strings.TrimPrefix(field, prefix), "\"")
+		}
+	}
+	return ""
+}
+
+func assertAirlockTransitionAudit(t *testing.T, evt audit.Event, rule, decision, kind, capability, from, to, reason string) {
+	t.Helper()
+	if evt.Outcome.Name != arbiterx.OutcomeAudit || evt.Outcome.Rule != rule || evt.Decision != decision {
+		t.Fatalf("audit outcome mismatch: %+v", evt)
+	}
+	if evt.InputEvent.Kind != kind || evt.Reason != reason {
+		t.Fatalf("audit event mismatch: %+v", evt)
+	}
+	if evt.Capability != capability {
+		t.Fatalf("capability mismatch: %+v", evt)
+	}
+	if evt.Clock == nil || evt.Clock.Source != audit.ClockSourceAirlockCLI || evt.Clock.EventTimeSource != audit.EventTimeSourceRecordedClock {
+		t.Fatalf("clock metadata mismatch: %+v", evt)
+	}
+	if got := evt.InputEvent.Fields["from_state"]; got != from {
+		t.Fatalf("from_state = %v, want %s", got, from)
+	}
+	if got := evt.InputEvent.Fields["to_state"]; got != to {
+		t.Fatalf("to_state = %v, want %s", got, to)
+	}
+	if got := evt.InputEvent.Fields["reason"]; got != reason {
+		t.Fatalf("reason field = %v, want %s", got, reason)
 	}
 }
 

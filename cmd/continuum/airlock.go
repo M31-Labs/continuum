@@ -17,7 +17,7 @@ import (
 
 func runAirlock(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return usageError("Usage: continuum airlock status|enter|release|simulate|accumulate")
+		return usageError("Usage: continuum airlock status|enter|release|remediate|simulate|accumulate")
 	}
 	switch args[0] {
 	case "status":
@@ -81,26 +81,89 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		reason := fs.String("reason", "manual release", "reason")
 		configPath := fs.String("config", "continuum.toml", "config path")
 		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		auditPath := fs.String("audit", defaultAuditPath, "audit JSONL path")
+		idStorePath := fs.String("id-store", defaultIDStorePath, "monotonic id store")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 1 {
-			return usageError("Usage: continuum airlock release [--reason reason] <session>")
+			return usageError("Usage: continuum airlock release [--reason reason] [--audit audit.jsonl] <session>")
 		}
 		cfg, err := loadConfigOrDefault(*configPath)
 		if err != nil {
 			return err
 		}
 		*storePath = resolveAirlockStorePath(*storePath, cfg)
+		*auditPath = resolveAuditPath(*auditPath, flagSet(fs, "audit"), cfg)
+		*idStorePath = resolveIDStorePath(*idStorePath, cfg)
+		now := time.Now().UTC()
+		auditID, err := cruntime.NextID(*idStorePath, "evt_airlock")
+		if err != nil {
+			return err
+		}
 		var session airlock.Session
+		var previous airlock.Session
 		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
 			var err error
-			session, err = store.Release(fs.Arg(0), *reason, time.Now().UTC())
-			return err
+			var ok bool
+			previous, ok = store.Get(fs.Arg(0))
+			if !ok {
+				return fmt.Errorf("airlock session %q not found", fs.Arg(0))
+			}
+			session, err = store.Release(fs.Arg(0), *reason, now)
+			if err != nil {
+				return err
+			}
+			return writeAirlockTransitionAudit(context.Background(), *auditPath, auditID, "release", previous, session, *reason, now)
 		}); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "RELEASE_AIRLOCK session=%s state=%s reason=%q\n", session.ID, session.State, session.Reason)
+		fmt.Fprintf(stdout, "RELEASE_AIRLOCK session=%s state=%s reason=%q audit=%s\n", session.ID, session.State, session.Reason, auditID)
+		return nil
+	case "remediate":
+		fs := flag.NewFlagSet("airlock remediate", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		reason := fs.String("reason", "manual remediation", "reason")
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		auditPath := fs.String("audit", defaultAuditPath, "audit JSONL path")
+		idStorePath := fs.String("id-store", defaultIDStorePath, "monotonic id store")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 1 {
+			return usageError("Usage: continuum airlock remediate [--reason reason] [--audit audit.jsonl] <session>")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolveAirlockStorePath(*storePath, cfg)
+		*auditPath = resolveAuditPath(*auditPath, flagSet(fs, "audit"), cfg)
+		*idStorePath = resolveIDStorePath(*idStorePath, cfg)
+		now := time.Now().UTC()
+		auditID, err := cruntime.NextID(*idStorePath, "evt_airlock")
+		if err != nil {
+			return err
+		}
+		var session airlock.Session
+		var previous airlock.Session
+		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
+			var err error
+			var ok bool
+			previous, ok = store.Get(fs.Arg(0))
+			if !ok {
+				return fmt.Errorf("airlock session %q not found", fs.Arg(0))
+			}
+			session, err = store.Remediate(fs.Arg(0), *reason, now)
+			if err != nil {
+				return err
+			}
+			return writeAirlockTransitionAudit(context.Background(), *auditPath, auditID, "remediate", previous, session, *reason, now)
+		}); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "REMEDIATE_AIRLOCK session=%s state=%s reason=%q audit=%s\n", session.ID, session.State, session.Reason, auditID)
 		return nil
 	case "simulate":
 		fs := flag.NewFlagSet("airlock simulate", flag.ContinueOnError)
@@ -222,7 +285,61 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s\nreason=%q\nstate=%s\naudit=%s\n", behavior.Subject, session.Reason, session.State, record.ID)
 		return nil
 	default:
-		return usageError("Usage: continuum airlock status|enter|release|simulate|accumulate")
+		return usageError("Usage: continuum airlock status|enter|release|remediate|simulate|accumulate")
+	}
+}
+
+func writeAirlockTransitionAudit(ctx context.Context, path, id, action string, previous, current airlock.Session, reason string, now time.Time) error {
+	sink, err := audit.NewJSONLSink(path)
+	if err != nil {
+		return err
+	}
+	defer sink.Close()
+	return sink.Write(ctx, airlockTransitionAuditEvent(id, action, previous, current, reason, now))
+}
+
+func airlockTransitionAuditEvent(id, action string, previous, current airlock.Session, reason string, now time.Time) audit.Event {
+	if id == "" {
+		id = fmt.Sprintf("evt_airlock_%d", now.UnixNano())
+	}
+	if reason == "" {
+		reason = current.Reason
+	}
+	rule := "AirlockRelease"
+	decision := "release_airlock"
+	kind := "airlock.release"
+	if action == "remediate" {
+		rule = "AirlockRemediation"
+		decision = "remediate_airlock"
+		kind = "airlock.remediate"
+	}
+	fields := map[string]any{
+		"reason":          reason,
+		"session":         current.ID,
+		"from_state":      string(previous.State),
+		"to_state":        string(current.State),
+		"operator_action": action,
+	}
+	input := event.Event{
+		ID:      id + "_input",
+		Time:    now,
+		Source:  "continuum.airlock",
+		Subject: current.Subject,
+		Kind:    kind,
+		Fields:  fields,
+	}
+	return audit.Event{
+		ID:          id,
+		Time:        now,
+		Clock:       &audit.ClockMetadata{Source: audit.ClockSourceAirlockCLI, RecordedAt: now, EventTimeSource: audit.EventTimeSourceRecordedClock},
+		Subject:     current.Subject,
+		InputEvent:  input,
+		Policy:      "airlock.operator",
+		Outcome:     arbiterx.NewOutcome(arbiterx.OutcomeAudit, rule, fields),
+		Decision:    decision,
+		Reason:      reason,
+		Capability:  "continuum.airlock." + action,
+		Enforcement: "observe",
 	}
 }
 
