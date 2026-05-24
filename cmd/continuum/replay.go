@@ -26,11 +26,15 @@ func runReplay(args []string, stdout, stderr io.Writer) error {
 	policyStorePath := fs.String("policy-store", ".continuum/policies.json", "policy store")
 	baselinePolicyPath := fs.String("baseline-policy", "", "baseline policy path for diff")
 	eventsPath := fs.String("events", "", "events JSON or JSONL path")
+	failOnDiff := fs.Bool("fail-on-diff", false, "exit non-zero when candidate decisions differ from baseline")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *eventsPath == "" {
-		return usageError("Usage: continuum replay [--policy candidate.arb] [--baseline-policy base.arb] --events events.jsonl")
+		return usageError("Usage: continuum replay [--policy candidate.arb] [--baseline-policy base.arb] [--fail-on-diff] --events events.jsonl")
+	}
+	if *failOnDiff && *baselinePolicyPath == "" {
+		return usageError("Usage: continuum replay --baseline-policy base.arb --policy candidate.arb --events events.jsonl --fail-on-diff")
 	}
 	cfg, err := loadOptionalConfig(*configPath)
 	if err != nil {
@@ -61,8 +65,15 @@ func runReplay(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		for _, diff := range creplay.Compare(baseResults, results) {
+		diffs := creplay.Compare(baseResults, results)
+		for _, diff := range diffs {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\n", diff.EventID, diff.Before, diff.After)
+		}
+		if *failOnDiff {
+			if len(diffs) > 0 {
+				return fmt.Errorf("replay gate failed: %d decision diff(s)", len(diffs))
+			}
+			fmt.Fprintf(stdout, "replay gate passed diffs=0 events=%d\n", len(events))
 		}
 		return nil
 	}

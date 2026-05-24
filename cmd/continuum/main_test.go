@@ -668,6 +668,40 @@ func TestReplayDiffCommand(t *testing.T) {
 	}
 }
 
+func TestReplayGateFailsOnDecisionDiff(t *testing.T) {
+	var out, errOut bytes.Buffer
+	err := run([]string{
+		"replay",
+		"--baseline-policy", "../../examples/airlock/policies/main.arb",
+		"--policy", "../../examples/agent-workdir/policies/main.arb",
+		"--events", "../../testdata/events/file_secret_access.json",
+		"--fail-on-diff",
+	}, &out, &errOut)
+	if err == nil || !strings.Contains(err.Error(), "replay gate failed: 1 decision diff(s)") {
+		t.Fatalf("replay gate error = %v", err)
+	}
+	if !strings.Contains(out.String(), "evt_secret") || !strings.Contains(out.String(), "audit") || !strings.Contains(out.String(), "deny") {
+		t.Fatalf("replay gate diff output = %q", out.String())
+	}
+}
+
+func TestReplayGatePassesWithoutDecisionDiff(t *testing.T) {
+	var out, errOut bytes.Buffer
+	err := run([]string{
+		"replay",
+		"--baseline-policy", "../../examples/agent-workdir/policies/main.arb",
+		"--policy", "../../examples/agent-workdir/policies/main.arb",
+		"--events", "../../testdata/events/file_secret_access.json",
+		"--fail-on-diff",
+	}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("replay gate: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "replay gate passed diffs=0 events=1") {
+		t.Fatalf("replay gate pass output = %q", out.String())
+	}
+}
+
 func TestReplayAirlockReviewFixtures(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if err := run([]string{

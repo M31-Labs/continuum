@@ -64,7 +64,7 @@ continuum audit show evt_123
 continuum audit verify --path .continuum/audit.jsonl
 continuum audit export --path .continuum/audit.jsonl --redact-fields path,host,ip --redact-subject --redact-raw --out audit-redacted.jsonl
 continuum explain evt_123
-continuum replay --baseline-policy current.arb --policy candidate.arb --events audit.jsonl
+continuum replay --baseline-policy current.arb --policy candidate.arb --events audit.jsonl --fail-on-diff
 continuum airlock status
 continuum airlock enter --pid 1234 --reason "wormlike fanout"
 continuum airlock accumulate --events audit.jsonl

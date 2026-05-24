@@ -51,7 +51,7 @@ enforcement backends exist and are reviewed.
 - [ ] Add capability manifest digest pinning in config.
 - [x] Add warning output for privileged/destructive capabilities.
 - [x] Add route tests for every built-in outcome.
-- [ ] Add replay gates that compare candidate policy decisions against baseline.
+- [x] Add replay gates that compare candidate policy decisions against baseline.
 
 ## Horizon Artifact Intake
 
