@@ -91,8 +91,8 @@ enforcement backends exist and are reviewed.
 
 - [x] Add audit hash chaining.
 - [x] Add audit chain verification command.
-- [ ] Add audit export with redaction controls.
-- [ ] Add audit query pagination.
+- [x] Add audit export with redaction controls.
+- [x] Add audit query pagination.
 - [x] Add audit event size limits.
 - [ ] Add audit clock-source metadata.
 - [ ] Add delivery attempt linkage checks in audit tests.

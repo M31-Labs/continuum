@@ -109,8 +109,15 @@ continuum ingest \
 
 ```sh
 continuum status --config continuum.toml
-continuum audit list --path /var/log/continuum/audit.jsonl
+continuum audit list --path /var/log/continuum/audit.jsonl --limit 100 --offset 0
 continuum audit verify --path /var/log/continuum/audit.jsonl
+continuum audit export \
+  --path /var/log/continuum/audit.jsonl \
+  --limit 500 \
+  --redact-fields path,host,ip \
+  --redact-subject \
+  --redact-raw \
+  --out continuum-audit-redacted.jsonl
 continuum grant list --config continuum.toml --all
 continuum airlock status --config continuum.toml
 ```

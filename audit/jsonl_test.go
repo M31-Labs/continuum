@@ -1,7 +1,9 @@
 package audit
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,5 +160,66 @@ func TestQueryFiltersAuditEvents(t *testing.T) {
 	got = Query(events, Filter{Decision: "deny", Limit: 1})
 	if len(got) != 1 || got[0].ID != "evt_3" {
 		t.Fatalf("limited = %+v", got)
+	}
+	got = Query(events, Filter{Offset: 1, Limit: 1})
+	if len(got) != 1 || got[0].ID != "evt_2" {
+		t.Fatalf("paged = %+v", got)
+	}
+	got = Query(events, Filter{Offset: 3})
+	if len(got) != 0 {
+		t.Fatalf("offset past end = %+v", got)
+	}
+}
+
+func TestExportRedactsAuditEvents(t *testing.T) {
+	evt := Event{
+		ID:      "evt_1",
+		Subject: subject.Subject{Kind: "agent", Session: "agent-42", AgentName: "claude", RepoRoot: "/repo"},
+		InputEvent: event.Event{
+			Kind:    "file.access",
+			Subject: subject.Subject{Kind: "agent", Session: "agent-42", AgentName: "claude", RepoRoot: "/repo"},
+			Fields: map[string]any{
+				"path": "/home/draco/.ssh/id_ed25519",
+				"op":   "read",
+			},
+			Raw: map[string]any{
+				"path": "/home/draco/.ssh/id_ed25519",
+			},
+		},
+		Outcome:   arbiterx.NewOutcome(arbiterx.OutcomeDeny, "DenyHostSecrets", map[string]any{"host": "github.com", "reason": "blocked"}),
+		Decision:  "deny",
+		ChainPrev: "prev",
+		ChainHash: "hash",
+	}
+
+	var buf bytes.Buffer
+	if err := ExportJSONL(&buf, []Event{evt}, RedactionOptions{
+		FieldNames:    []string{"path", "host"},
+		RedactRaw:     true,
+		RedactSubject: true,
+	}); err != nil {
+		t.Fatalf("ExportJSONL: %v", err)
+	}
+	if strings.Contains(buf.String(), "/home/draco/.ssh") || strings.Contains(buf.String(), "github.com") {
+		t.Fatalf("export leaked redacted values: %s", buf.String())
+	}
+	var got Event
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got); err != nil {
+		t.Fatalf("Unmarshal export: %v", err)
+	}
+	if got.Subject.Kind != "agent" || got.Subject.Session != "" || got.Subject.AgentName != "" {
+		t.Fatalf("subject not redacted: %+v", got.Subject)
+	}
+	if got.InputEvent.Raw != nil {
+		t.Fatalf("raw not redacted: %+v", got.InputEvent.Raw)
+	}
+	if got.InputEvent.Fields["path"] != redactedValue || got.Outcome.Fields["host"] != redactedValue {
+		t.Fatalf("fields not redacted: input=%+v outcome=%+v", got.InputEvent.Fields, got.Outcome.Fields)
+	}
+	if got.ChainPrev != "" || got.ChainHash != "" {
+		t.Fatalf("redacted export preserved chain fields: prev=%q hash=%q", got.ChainPrev, got.ChainHash)
+	}
+	if evt.InputEvent.Fields["path"] != "/home/draco/.ssh/id_ed25519" || evt.Outcome.Fields["host"] != "github.com" {
+		t.Fatalf("source event mutated: %+v", evt)
 	}
 }

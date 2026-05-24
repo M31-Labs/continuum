@@ -57,8 +57,10 @@ continuum capabilities inspect path/to/exported/output.bpf.o
 continuum grant --session agent-session-42 --capability network.connect --host github.com --port 443 --ttl 20m --reason "fetch dependency"
 continuum grant --session agent-session-42 --capability file.write --path .github/workflows/test.yml --op write --ttl 20m --reason "approve CI edit"
 continuum audit list
+continuum audit list --limit 100 --offset 200 --json
 continuum audit show evt_123
 continuum audit verify --path .continuum/audit.jsonl
+continuum audit export --path .continuum/audit.jsonl --redact-fields path,host,ip --redact-subject --redact-raw --out audit-redacted.jsonl
 continuum explain evt_123
 continuum replay --baseline-policy current.arb --policy candidate.arb --events audit.jsonl
 continuum airlock status

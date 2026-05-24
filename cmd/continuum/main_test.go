@@ -1069,6 +1069,46 @@ func TestAuditListFilters(t *testing.T) {
 		t.Fatalf("audit filter output = %q", out.String())
 	}
 	out.Reset()
+	if err := run([]string{"audit", "list", "--path", path, "--offset", "1", "--limit", "1", "--json"}, &out, &errOut); err != nil {
+		t.Fatalf("audit list paged: %v", err)
+	}
+	var paged []audit.Event
+	if err := json.Unmarshal(out.Bytes(), &paged); err != nil {
+		t.Fatalf("decode paged audit list: %v", err)
+	}
+	if len(paged) != 1 || paged[0].Outcome.Rule != "DenyHostSecrets" {
+		t.Fatalf("paged audit output = %+v", paged)
+	}
+	out.Reset()
+	exportPath := filepath.Join(t.TempDir(), "exports", "audit-redacted.jsonl")
+	if err := run([]string{"audit", "export", "--path", path, "--out", exportPath, "--offset", "1", "--limit", "1", "--redact-fields", "path", "--redact-subject", "--redact-raw"}, &out, &errOut); err != nil {
+		t.Fatalf("audit export: %v", err)
+	}
+	if !strings.Contains(out.String(), "exported audit events=1") || !strings.Contains(out.String(), "redacted=true") {
+		t.Fatalf("audit export output = %q", out.String())
+	}
+	exportData, err := os.ReadFile(exportPath)
+	if err != nil {
+		t.Fatalf("ReadFile export: %v", err)
+	}
+	info, err := os.Stat(exportPath)
+	if err != nil {
+		t.Fatalf("Stat export: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Fatalf("export mode = %v, want 0600", got)
+	}
+	if strings.Contains(string(exportData), "/home/draco/.ssh") || strings.Contains(string(exportData), "chain_hash") {
+		t.Fatalf("redacted export leaked source values or chain hash: %s", string(exportData))
+	}
+	var exported audit.Event
+	if err := json.Unmarshal(bytes.TrimSpace(exportData), &exported); err != nil {
+		t.Fatalf("decode export: %v", err)
+	}
+	if exported.InputEvent.Fields["path"] != "[REDACTED]" || exported.Subject.Session != "" {
+		t.Fatalf("redacted export event = %+v", exported)
+	}
+	out.Reset()
 	if err := run([]string{"audit", "verify", "--path", path}, &out, &errOut); err != nil {
 		t.Fatalf("audit verify: %v", err)
 	}

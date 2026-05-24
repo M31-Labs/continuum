@@ -7,6 +7,7 @@ type Filter struct {
 	Subject  string
 	Kind     string
 	Limit    int
+	Offset   int
 }
 
 func Find(events []Event, id string) (Event, bool) {
@@ -42,6 +43,16 @@ func Query(events []Event, filter Filter) []Event {
 			continue
 		}
 		out = append(out, evt)
+	}
+	if filter.Offset > 0 {
+		if filter.Offset >= len(out) {
+			return nil
+		}
+		out = out[filter.Offset:]
+		if filter.Limit > 0 && len(out) > filter.Limit {
+			return out[:filter.Limit]
+		}
+		return out
 	}
 	if filter.Limit > 0 && len(out) > filter.Limit {
 		return out[len(out)-filter.Limit:]
