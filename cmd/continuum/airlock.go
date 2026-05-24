@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -17,7 +19,7 @@ import (
 
 func runAirlock(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return usageError("Usage: continuum airlock status|enter|release|remediate|note|notes|simulate|accumulate")
+		return usageError("Usage: continuum airlock status|enter|release|remediate|note|notes|export|compact|simulate|accumulate")
 	}
 	switch args[0] {
 	case "status":
@@ -226,6 +228,83 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\n", note.Time.Format(time.RFC3339), note.Operator, note.Text)
 		}
 		return nil
+	case "export":
+		fs := flag.NewFlagSet("airlock export", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		outPath := fs.String("out", "", "write exported JSON to path instead of stdout")
+		state := fs.String("state", "", "filter by airlock state")
+		redactNotes := fs.Bool("redact-notes", false, "drop operator note text")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return usageError("Usage: continuum airlock export [--store .continuum/airlock.json] [--out airlocks.json] [--state airlocked] [--redact-notes]")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolveAirlockStorePath(*storePath, cfg)
+		store, err := airlock.LoadStore(*storePath)
+		if err != nil {
+			return err
+		}
+		sessions := filterAirlockSessions(store.List(), airlock.State(*state))
+		if *redactNotes {
+			sessions = redactAirlockNotes(sessions)
+		}
+		if *outPath == "" {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(sessions)
+		}
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(sessions); err != nil {
+			return err
+		}
+		if err := writePrivateExportFile(*outPath, buf.Bytes()); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "exported airlock sessions=%d out=%s redacted_notes=%t\n", len(sessions), *outPath, *redactNotes)
+		return nil
+	case "compact":
+		fs := flag.NewFlagSet("airlock compact", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		retain := fs.Int("retain", 0, "retain newest terminal airlock sessions")
+		olderThan := fs.Duration("older-than", 0, "remove terminal airlock sessions older than this age")
+		jsonOut := fs.Bool("json", false, "emit JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return usageError("Usage: continuum airlock compact [--store .continuum/airlock.json] [--retain N] [--older-than 720h] [--json]")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolveAirlockStorePath(*storePath, cfg)
+		var report airlock.RetentionReport
+		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
+			var err error
+			report, err = store.Compact(airlock.RetentionOptions{Retain: *retain, OlderThan: *olderThan, Now: time.Now().UTC()})
+			return err
+		}); err != nil {
+			return err
+		}
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(report)
+		}
+		fmt.Fprintf(stdout, "compacted airlocks before=%d after=%d removed=%d store=%s\n", report.Before, report.After, report.Removed, *storePath)
+		return nil
 	case "simulate":
 		fs := flag.NewFlagSet("airlock simulate", flag.ContinueOnError)
 		fs.SetOutput(stderr)
@@ -346,8 +425,30 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s\nreason=%q\nstate=%s\naudit=%s\n", behavior.Subject, session.Reason, session.State, record.ID)
 		return nil
 	default:
-		return usageError("Usage: continuum airlock status|enter|release|remediate|note|notes|simulate|accumulate")
+		return usageError("Usage: continuum airlock status|enter|release|remediate|note|notes|export|compact|simulate|accumulate")
 	}
+}
+
+func filterAirlockSessions(sessions []airlock.Session, state airlock.State) []airlock.Session {
+	if state == "" {
+		return sessions
+	}
+	out := make([]airlock.Session, 0, len(sessions))
+	for _, session := range sessions {
+		if session.State == state {
+			out = append(out, session)
+		}
+	}
+	return out
+}
+
+func redactAirlockNotes(sessions []airlock.Session) []airlock.Session {
+	out := make([]airlock.Session, len(sessions))
+	for i, session := range sessions {
+		session.Notes = nil
+		out[i] = session
+	}
+	return out
 }
 
 func writeAirlockTransitionAudit(ctx context.Context, path, id, action string, previous, current airlock.Session, reason string, now time.Time) error {

@@ -171,6 +171,45 @@ func TestStorePersistsOperatorNotes(t *testing.T) {
 	}
 }
 
+func TestStoreCompactsTerminalSessions(t *testing.T) {
+	store := NewStore()
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	if _, err := store.Enter("old-released", subject.NewProcessTree("old-released", 1), "test", now.Add(-72*time.Hour)); err != nil {
+		t.Fatalf("Enter old released: %v", err)
+	}
+	if _, err := store.Release("old-released", "done", now.Add(-70*time.Hour)); err != nil {
+		t.Fatalf("Release old: %v", err)
+	}
+	if _, err := store.Enter("new-released", subject.NewProcessTree("new-released", 2), "test", now.Add(-48*time.Hour)); err != nil {
+		t.Fatalf("Enter new released: %v", err)
+	}
+	if _, err := store.Release("new-released", "done", now.Add(-30*time.Minute)); err != nil {
+		t.Fatalf("Release new: %v", err)
+	}
+	if _, err := store.Enter("active", subject.NewProcessTree("active", 3), "still contained", now.Add(-72*time.Hour)); err != nil {
+		t.Fatalf("Enter active: %v", err)
+	}
+	report, err := store.Compact(RetentionOptions{Retain: 1, OlderThan: time.Hour, Now: now})
+	if err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if report.Before != 3 || report.After != 2 || report.Removed != 1 {
+		t.Fatalf("report = %+v", report)
+	}
+	if _, ok := store.Get("old-released"); ok {
+		t.Fatal("old terminal session was retained")
+	}
+	if _, ok := store.Get("new-released"); !ok {
+		t.Fatal("newest terminal session was removed")
+	}
+	if _, ok := store.Get("active"); !ok {
+		t.Fatal("active session was removed")
+	}
+	if _, err := store.Compact(RetentionOptions{}); err == nil {
+		t.Fatal("Compact accepted empty retention policy")
+	}
+}
+
 func TestStoreSchemaMigration(t *testing.T) {
 	dir := t.TempDir()
 	legacyPath := filepath.Join(dir, "legacy-airlock.json")

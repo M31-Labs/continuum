@@ -25,6 +25,18 @@ type storeFile struct {
 	Sessions      []Session `json:"sessions,omitempty"`
 }
 
+type RetentionOptions struct {
+	Retain    int
+	OlderThan time.Duration
+	Now       time.Time
+}
+
+type RetentionReport struct {
+	Before  int `json:"before"`
+	After   int `json:"after"`
+	Removed int `json:"removed"`
+}
+
 func NewStore() *Store {
 	return &Store{SchemaVersion: StoreSchemaVersion, sessions: map[string]Session{}}
 }
@@ -158,6 +170,32 @@ func (s *Store) AddNote(id, operator, text string, now time.Time) (Session, Note
 	return session, note, nil
 }
 
+func (s *Store) Compact(opts RetentionOptions) (RetentionReport, error) {
+	if err := opts.Validate(); err != nil {
+		return RetentionReport{}, err
+	}
+	now := opts.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	cutoff := now.Add(-opts.OlderThan)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	report := RetentionReport{Before: len(s.sessions)}
+	protected := newestTerminalSessionSet(s.sessions, opts.Retain)
+	for id, session := range s.sessions {
+		if !terminalState(session.State) || protected[id] {
+			continue
+		}
+		if opts.OlderThan == 0 || sessionRetentionTime(session).Before(cutoff) {
+			delete(s.sessions, id)
+		}
+	}
+	report.After = len(s.sessions)
+	report.Removed = report.Before - report.After
+	return report, nil
+}
+
 func (s *Store) transition(id string, next State, reason string, now time.Time) (Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -195,4 +233,70 @@ func (s *Store) List() []Session {
 		return 1
 	})
 	return out
+}
+
+func (o RetentionOptions) Validate() error {
+	if o.Retain < 0 {
+		return fmt.Errorf("retain must be >= 0")
+	}
+	if o.OlderThan < 0 {
+		return fmt.Errorf("older-than must be >= 0")
+	}
+	if o.Retain == 0 && o.OlderThan == 0 {
+		return fmt.Errorf("retain or older-than is required")
+	}
+	return nil
+}
+
+func newestTerminalSessionSet(sessions map[string]Session, retain int) map[string]bool {
+	protected := map[string]bool{}
+	if retain <= 0 {
+		return protected
+	}
+	terminal := make([]Session, 0, len(sessions))
+	for _, session := range sessions {
+		if terminalState(session.State) {
+			terminal = append(terminal, session)
+		}
+	}
+	slices.SortFunc(terminal, func(a, b Session) int {
+		at := sessionRetentionTime(a)
+		bt := sessionRetentionTime(b)
+		if at.Equal(bt) {
+			return stringsCompare(a.ID, b.ID)
+		}
+		if at.Before(bt) {
+			return -1
+		}
+		return 1
+	})
+	start := len(terminal) - retain
+	if start < 0 {
+		start = 0
+	}
+	for _, session := range terminal[start:] {
+		protected[session.ID] = true
+	}
+	return protected
+}
+
+func terminalState(state State) bool {
+	return state == StateReleased || state == StateRemediated || state == StateDestroyed
+}
+
+func sessionRetentionTime(session Session) time.Time {
+	if !session.UpdatedAt.IsZero() {
+		return session.UpdatedAt
+	}
+	return session.StartedAt
+}
+
+func stringsCompare(a, b string) int {
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
 }

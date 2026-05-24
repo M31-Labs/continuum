@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"m31labs.dev/continuum/airlock"
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
@@ -1062,6 +1063,74 @@ func TestAirlockNoteCommandPersistsAndListsNotes(t *testing.T) {
 	}
 	if err := run([]string{"airlock", "note", "--store", store, "--text", "   ", session}, &out, &errOut); err == nil {
 		t.Fatal("airlock note accepted empty text")
+	}
+}
+
+func TestAirlockExportAndCompactCommands(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "airlock.json")
+	exportPath := filepath.Join(dir, "exports", "airlocks.json")
+	store := airlock.NewStore()
+	now := time.Now().UTC()
+	if _, err := store.Enter("old-released", subject.NewProcessTree("old-released", 1), "test", now.Add(-72*time.Hour)); err != nil {
+		t.Fatalf("Enter old released: %v", err)
+	}
+	if _, err := store.Release("old-released", "done", now.Add(-70*time.Hour)); err != nil {
+		t.Fatalf("Release old: %v", err)
+	}
+	if _, _, err := store.AddNote("old-released", "oscar", "sensitive note", now.Add(-69*time.Hour)); err != nil {
+		t.Fatalf("AddNote old: %v", err)
+	}
+	if _, err := store.Enter("new-released", subject.NewProcessTree("new-released", 2), "test", now.Add(-48*time.Hour)); err != nil {
+		t.Fatalf("Enter new released: %v", err)
+	}
+	if _, err := store.Release("new-released", "done", now.Add(-30*time.Minute)); err != nil {
+		t.Fatalf("Release new: %v", err)
+	}
+	if _, err := store.Enter("active", subject.NewProcessTree("active", 3), "still contained", now.Add(-72*time.Hour)); err != nil {
+		t.Fatalf("Enter active: %v", err)
+	}
+	if err := store.Save(storePath); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	var out, errOut bytes.Buffer
+	if err := run([]string{"airlock", "export", "--store", storePath, "--out", exportPath, "--state", "released", "--redact-notes"}, &out, &errOut); err != nil {
+		t.Fatalf("airlock export: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "exported airlock sessions=2") || !strings.Contains(out.String(), "redacted_notes=true") {
+		t.Fatalf("export output = %q", out.String())
+	}
+	exported, err := os.ReadFile(exportPath)
+	if err != nil {
+		t.Fatalf("ReadFile export: %v", err)
+	}
+	if strings.Contains(string(exported), "sensitive note") || strings.Contains(string(exported), `"notes"`) {
+		t.Fatalf("export did not redact notes: %s", exported)
+	}
+	if strings.Contains(string(exported), "active") {
+		t.Fatalf("export state filter included active session: %s", exported)
+	}
+
+	out.Reset()
+	if err := run([]string{"airlock", "compact", "--store", storePath, "--retain", "1", "--older-than", "1h"}, &out, &errOut); err != nil {
+		t.Fatalf("airlock compact: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "before=3") || !strings.Contains(out.String(), "after=2") || !strings.Contains(out.String(), "removed=1") {
+		t.Fatalf("compact output = %q", out.String())
+	}
+	reloaded, err := airlock.LoadStore(storePath)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if _, ok := reloaded.Get("old-released"); ok {
+		t.Fatal("old released airlock retained after compact")
+	}
+	if _, ok := reloaded.Get("new-released"); !ok {
+		t.Fatal("new released airlock removed after compact")
+	}
+	if _, ok := reloaded.Get("active"); !ok {
+		t.Fatal("active airlock removed after compact")
 	}
 }
 

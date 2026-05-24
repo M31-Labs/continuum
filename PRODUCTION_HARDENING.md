@@ -116,7 +116,7 @@ enforcement backends exist and are reviewed.
 - [x] Add airlock state transition validation tests for all legal paths.
 - [x] Add operator notes to airlock sessions.
 - [x] Add decoy capability registration without real enforcement claims.
-- [ ] Add airlock retention/export commands.
+- [x] Add airlock retention/export commands.
 - [ ] Add airlock policy replay fixtures for false-positive review.
 
 ## Operator Experience
