@@ -114,7 +114,7 @@ enforcement backends exist and are reviewed.
 - [ ] Persist airlock behavior accumulators across daemon restarts.
 - [x] Add airlock release/remediation audit events.
 - [x] Add airlock state transition validation tests for all legal paths.
-- [ ] Add operator notes to airlock sessions.
+- [x] Add operator notes to airlock sessions.
 - [ ] Add decoy capability registration without real enforcement claims.
 - [ ] Add airlock retention/export commands.
 - [ ] Add airlock policy replay fixtures for false-positive review.

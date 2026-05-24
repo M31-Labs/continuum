@@ -1034,6 +1034,34 @@ func TestAirlockReleaseAndRemediateWriteAuditEvents(t *testing.T) {
 	}
 }
 
+func TestAirlockNoteCommandPersistsAndListsNotes(t *testing.T) {
+	dir := t.TempDir()
+	store := filepath.Join(dir, "airlock.json")
+	idStore := filepath.Join(dir, "ids.json")
+	var out, errOut bytes.Buffer
+	if err := run([]string{"airlock", "enter", "--store", store, "--id-store", idStore, "--pid", "1234", "--reason", "test"}, &out, &errOut); err != nil {
+		t.Fatalf("airlock enter: %v", err)
+	}
+	session := outputField(out.String(), "session")
+	out.Reset()
+	if err := run([]string{"airlock", "note", "--store", store, "--operator", "oscar", "--text", "reviewed containment state", session}, &out, &errOut); err != nil {
+		t.Fatalf("airlock note: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "NOTE_AIRLOCK") || !strings.Contains(out.String(), "notes=1") || !strings.Contains(out.String(), `operator="oscar"`) {
+		t.Fatalf("note output = %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"airlock", "notes", "--store", store, session}, &out, &errOut); err != nil {
+		t.Fatalf("airlock notes: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "oscar") || !strings.Contains(out.String(), "reviewed containment state") {
+		t.Fatalf("notes output = %q", out.String())
+	}
+	if err := run([]string{"airlock", "note", "--store", store, "--text", "   ", session}, &out, &errOut); err == nil {
+		t.Fatal("airlock note accepted empty text")
+	}
+}
+
 func TestAirlockAccumulateCommandEntersAirlock(t *testing.T) {
 	dir := t.TempDir()
 	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 1234)

@@ -17,7 +17,7 @@ import (
 
 func runAirlock(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return usageError("Usage: continuum airlock status|enter|release|remediate|simulate|accumulate")
+		return usageError("Usage: continuum airlock status|enter|release|remediate|note|notes|simulate|accumulate")
 	}
 	switch args[0] {
 	case "status":
@@ -165,6 +165,67 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "REMEDIATE_AIRLOCK session=%s state=%s reason=%q audit=%s\n", session.ID, session.State, session.Reason, auditID)
 		return nil
+	case "note":
+		fs := flag.NewFlagSet("airlock note", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		operator := fs.String("operator", "operator", "operator label")
+		text := fs.String("text", "", "note text")
+		noteText := fs.String("note", "", "note text")
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *text == "" {
+			*text = *noteText
+		}
+		if fs.NArg() != 1 || *text == "" {
+			return usageError("Usage: continuum airlock note --text <note> [--operator name] <session>")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolveAirlockStorePath(*storePath, cfg)
+		var session airlock.Session
+		var note airlock.Note
+		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
+			var err error
+			session, note, err = store.AddNote(fs.Arg(0), *operator, *text, time.Now().UTC())
+			return err
+		}); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "NOTE_AIRLOCK session=%s notes=%d operator=%q time=%s\n", session.ID, len(session.Notes), note.Operator, note.Time.Format(time.RFC3339))
+		return nil
+	case "notes":
+		fs := flag.NewFlagSet("airlock notes", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 1 {
+			return usageError("Usage: continuum airlock notes <session>")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolveAirlockStorePath(*storePath, cfg)
+		store, err := airlock.LoadStore(*storePath)
+		if err != nil {
+			return err
+		}
+		session, ok := store.Get(fs.Arg(0))
+		if !ok {
+			return fmt.Errorf("airlock session %q not found", fs.Arg(0))
+		}
+		for _, note := range session.Notes {
+			fmt.Fprintf(stdout, "%s\t%s\t%s\n", note.Time.Format(time.RFC3339), note.Operator, note.Text)
+		}
+		return nil
 	case "simulate":
 		fs := flag.NewFlagSet("airlock simulate", flag.ContinueOnError)
 		fs.SetOutput(stderr)
@@ -285,7 +346,7 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s\nreason=%q\nstate=%s\naudit=%s\n", behavior.Subject, session.Reason, session.State, record.ID)
 		return nil
 	default:
-		return usageError("Usage: continuum airlock status|enter|release|remediate|simulate|accumulate")
+		return usageError("Usage: continuum airlock status|enter|release|remediate|note|notes|simulate|accumulate")
 	}
 }
 

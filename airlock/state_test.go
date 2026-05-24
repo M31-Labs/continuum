@@ -135,6 +135,42 @@ func TestStorePersistsSessions(t *testing.T) {
 	}
 }
 
+func TestStorePersistsOperatorNotes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "airlock.json")
+	store := NewStore()
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	if _, err := store.Enter("airlock-1", subject.NewProcessTree("demo", 123), "test", now); err != nil {
+		t.Fatalf("Enter: %v", err)
+	}
+	session, note, err := store.AddNote("airlock-1", "oscar", "  observed fanout stabilized  ", now.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("AddNote: %v", err)
+	}
+	if note.Text != "observed fanout stabilized" || note.Operator != "oscar" {
+		t.Fatalf("note = %+v", note)
+	}
+	if len(session.Notes) != 1 || !session.UpdatedAt.Equal(now.Add(time.Minute)) {
+		t.Fatalf("session after note = %+v", session)
+	}
+	if _, _, err := store.AddNote("airlock-1", "oscar", "   ", now); err == nil {
+		t.Fatal("AddNote accepted empty note")
+	}
+	if _, _, err := store.AddNote("missing", "oscar", "note", now); err == nil {
+		t.Fatal("AddNote accepted missing session")
+	}
+	if err := store.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	reloaded, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	reloadedSession, ok := reloaded.Get("airlock-1")
+	if !ok || len(reloadedSession.Notes) != 1 || reloadedSession.Notes[0].Text != "observed fanout stabilized" {
+		t.Fatalf("reloaded notes = %+v ok=%t", reloadedSession, ok)
+	}
+}
+
 func TestStoreSchemaMigration(t *testing.T) {
 	dir := t.TempDir()
 	legacyPath := filepath.Join(dir, "legacy-airlock.json")

@@ -143,6 +143,21 @@ func (s *Store) Get(id string) (Session, bool) {
 	return session, true
 }
 
+func (s *Store) AddNote(id, operator, text string, now time.Time) (Session, Note, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[id]
+	if !ok {
+		return Session{}, Note{}, fmt.Errorf("airlock session %q not found", id)
+	}
+	note, err := session.AddNote(operator, text, now)
+	if err != nil {
+		return Session{}, Note{}, err
+	}
+	s.sessions[id] = session
+	return session, note, nil
+}
+
 func (s *Store) transition(id string, next State, reason string, now time.Time) (Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
