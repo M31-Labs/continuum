@@ -17,8 +17,16 @@ import (
 	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/event"
 	"m31labs.dev/continuum/horizon"
+	"m31labs.dev/continuum/internal/testutil"
 	"m31labs.dev/continuum/subject"
 )
+
+type goldenHTTPError struct {
+	Status      int               `json:"status"`
+	StatusText  string            `json:"status_text"`
+	ContentType string            `json:"content_type"`
+	Body        map[string]string `json:"body"`
+}
 
 func TestHTTPHandlerServesHealthAndCapabilities(t *testing.T) {
 	daemon := NewDaemon(staticCapabilityProvider{caps: []capability.Capability{sourceCapability("kernel.process.exec.observe")}})
@@ -107,6 +115,98 @@ func TestHTTPHandlerReturnsStructuredMethodErrors(t *testing.T) {
 		if !strings.Contains(res.Header().Get("content-type"), "application/json") || !strings.Contains(res.Body.String(), `"error"`) {
 			t.Fatalf("%s %s did not return structured error: content-type=%s body=%s", tc.method, tc.path, res.Header().Get("content-type"), res.Body.String())
 		}
+	}
+}
+
+func TestHTTPHandlerGoldenErrorResponses(t *testing.T) {
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandler(daemon)
+	authHandler := NewHTTPHandlerWithStateAndOptions(daemon, StatePaths{}, HTTPOptions{AuthToken: "secret"})
+	smallBodyHandler := NewHTTPHandlerWithStateAndOptions(daemon, StatePaths{}, HTTPOptions{MaxBodyBytes: 4})
+	uninitializedHandler := NewHTTPHandlerWithStateAndOptions(&Daemon{}, StatePaths{}, HTTPOptions{})
+
+	for _, tc := range []struct {
+		name    string
+		handler http.Handler
+		request func() *http.Request
+	}{
+		{
+			name:    "method_not_allowed",
+			handler: handler,
+			request: func() *http.Request {
+				return httptest.NewRequest(http.MethodPost, "/healthz", nil)
+			},
+		},
+		{
+			name:    "unauthorized",
+			handler: authHandler,
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader("{}"))
+				req.Header.Set("content-type", "application/json")
+				return req
+			},
+		},
+		{
+			name:    "cors_origin_denied",
+			handler: handler,
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+				req.Header.Set("origin", "https://console.example")
+				return req
+			},
+		},
+		{
+			name:    "unsupported_ingest_content_type",
+			handler: handler,
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader("{}"))
+				req.Header.Set("content-type", "application/octet-stream")
+				return req
+			},
+		},
+		{
+			name:    "bad_ingest_json",
+			handler: handler,
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader("{"))
+				req.Header.Set("content-type", "application/json")
+				return req
+			},
+		},
+		{
+			name:    "body_too_large",
+			handler: smallBodyHandler,
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader(`{"kind":"process.exec"}`))
+				req.Header.Set("content-type", "application/json")
+				return req
+			},
+		},
+		{
+			name:    "daemon_not_initialized",
+			handler: uninitializedHandler,
+			request: func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/capabilities", nil)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := httptest.NewRecorder()
+			tc.handler.ServeHTTP(res, tc.request())
+			var body map[string]string
+			if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode error body: %v body=%s", err, res.Body.String())
+			}
+			testutil.EqualGoldenJSON(t, filepath.Join("..", "testdata", "golden", "daemon_error_"+tc.name+".json"), goldenHTTPError{
+				Status:      res.Code,
+				StatusText:  http.StatusText(res.Code),
+				ContentType: res.Header().Get("content-type"),
+				Body:        body,
+			})
+		})
 	}
 }
 
@@ -297,6 +397,120 @@ func TestHTTPHandlerIngestsHorizonEnvelope(t *testing.T) {
 	}
 	if len(sessions.Sessions) != 1 || sessions.Sessions[0].ProcessTree == nil || sessions.Sessions[0].ProcessTree.RootPID != 321 {
 		t.Fatalf("sessions = %+v", sessions.Sessions)
+	}
+}
+
+func TestDaemonHTTPIngestPersistsSessionAcrossRestart(t *testing.T) {
+	dir := t.TempDir()
+	paths := StatePaths{
+		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		Audit:         filepath.Join(dir, "audit.jsonl"),
+		Sessions:      filepath.Join(dir, "sessions.json"),
+		Deliveries:    filepath.Join(dir, "deliveries.json"),
+		IDStore:       filepath.Join(dir, "ids.json"),
+		Airlock:       filepath.Join(dir, "airlock.json"),
+		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+	}
+
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	server := httptest.NewServer(NewHTTPHandlerWithStateAndOptions(daemon, paths, HTTPOptions{AuthToken: "secret"}))
+
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	subj := subject.NewAgent("claude", "agent-integration", "/repo", "integration", 222)
+	execEvent := event.NewProcessExec(subj, map[string]any{
+		"pid":       222,
+		"comm":      "bash",
+		"argv_text": "bash",
+		"cwd":       "/repo",
+	})
+	execEvent.ID = "evt_integration_exec"
+	execEvent.Time = now
+	exitEvent := event.NewProcessExit(subj, map[string]any{
+		"pid":       222,
+		"exit_code": 0,
+	})
+	exitEvent.ID = "evt_integration_exit"
+	exitEvent.Time = now.Add(time.Second)
+	body, err := json.Marshal([]event.Event{execEvent, exitEvent})
+	if err != nil {
+		t.Fatalf("marshal events: %v", err)
+	}
+	result, err := NewClient(server.URL).Ingest(context.Background(), body, ClientIngestOptions{
+		SessionStore:  paths.Sessions,
+		DeliveryStore: paths.Deliveries,
+		IDStore:       paths.IDStore,
+		AuditPath:     paths.Audit,
+		PolicyPath:    paths.PolicyBundle,
+		AuthToken:     "secret",
+		NoAirlock:     true,
+	})
+	server.Close()
+	if err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+	if result.Ingested != 2 || result.ProcessEvents != 2 {
+		t.Fatalf("result = %+v", result)
+	}
+
+	store, err := LoadSessionStore(paths.Sessions)
+	if err != nil {
+		t.Fatalf("LoadSessionStore: %v", err)
+	}
+	assertPersistedIntegrationSession(t, store.Sessions)
+
+	restarted := NewDaemon(nil)
+	if err := restarted.Start(context.Background()); err != nil {
+		t.Fatalf("restart Start: %v", err)
+	}
+	readServer := httptest.NewServer(NewHTTPHandlerWithStateAndOptions(restarted, paths, HTTPOptions{
+		AuthToken:           "secret",
+		RequireAuthForReads: true,
+	}))
+	defer readServer.Close()
+	req, err := http.NewRequest(http.MethodGet, readServer.URL+"/sessions", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("authorization", "Bearer secret")
+	res, err := readServer.Client().Do(req)
+	if err != nil {
+		t.Fatalf("GET /sessions: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("GET /sessions status = %d", res.StatusCode)
+	}
+	var sessions []Session
+	if err := json.NewDecoder(res.Body).Decode(&sessions); err != nil {
+		t.Fatalf("decode /sessions: %v", err)
+	}
+	assertPersistedIntegrationSession(t, sessions)
+}
+
+func assertPersistedIntegrationSession(t *testing.T, sessions []Session) {
+	t.Helper()
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %+v", sessions)
+	}
+	session := sessions[0]
+	if session.ID != "agent-integration" || session.State != SessionExited || session.ExitCode != 0 {
+		t.Fatalf("session = %+v", session)
+	}
+	if session.Subject.AgentName != "claude" || session.Subject.RepoRoot != "/repo" || session.Subject.PID != 222 {
+		t.Fatalf("session subject = %+v", session.Subject)
+	}
+	if session.ProcessTree == nil || session.ProcessTree.RootPID != 222 || len(session.ProcessTree.Processes) != 1 {
+		t.Fatalf("process tree = %+v", session.ProcessTree)
+	}
+	process := session.ProcessTree.Processes[0]
+	if process.PID != 222 || process.State != ProcessExited || process.Comm != "bash" || process.CWD != "/repo" {
+		t.Fatalf("process = %+v", process)
+	}
+	if session.StartedAt.IsZero() || session.LastHeartbeatAt.IsZero() || session.EndedAt.IsZero() {
+		t.Fatalf("session timestamps were not persisted: %+v", session)
 	}
 }
 

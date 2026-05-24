@@ -1,0 +1,8 @@
+{
+  "status": 400,
+  "status_text": "Bad Request",
+  "content_type": "application/json",
+  "body": {
+    "error": "decode event line 1: unexpected end of JSON input"
+  }
+}

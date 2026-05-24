@@ -1,0 +1,8 @@
+{
+  "status": 415,
+  "status_text": "Unsupported Media Type",
+  "content_type": "application/json",
+  "body": {
+    "error": "unsupported content type"
+  }
+}

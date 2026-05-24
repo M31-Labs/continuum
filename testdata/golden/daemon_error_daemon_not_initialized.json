@@ -1,0 +1,8 @@
+{
+  "status": 503,
+  "status_text": "Service Unavailable",
+  "content_type": "application/json",
+  "body": {
+    "error": "daemon not initialized"
+  }
+}

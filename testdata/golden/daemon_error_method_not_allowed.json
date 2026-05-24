@@ -1,0 +1,8 @@
+{
+  "status": 405,
+  "status_text": "Method Not Allowed",
+  "content_type": "application/json",
+  "body": {
+    "error": "method not allowed"
+  }
+}

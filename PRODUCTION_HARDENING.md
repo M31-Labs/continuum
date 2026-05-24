@@ -140,8 +140,8 @@ enforcement backends exist and are reviewed.
 - [x] Add govulncheck CI.
 - [x] Add coverage report generation.
 - [x] Add fuzz tests for event and Horizon envelope decoding.
-- [ ] Add golden tests for daemon error responses.
-- [ ] Add integration test for daemon ingest plus session persistence.
+- [x] Add golden tests for daemon error responses.
+- [x] Add integration test for daemon ingest plus session persistence.
 - [x] Add public-repo secret scanning guidance.
 - [x] Add dependency update policy.
 
