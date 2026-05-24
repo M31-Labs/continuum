@@ -75,6 +75,17 @@ examples/demo-v0.sh
 For production-style observe-mode pilots, see
 [docs/observe-mode-pilot.md](docs/observe-mode-pilot.md).
 
+## Container Image
+
+Continuum ships a build-only OCI image path for pilots and CI smoke tests. The
+image contains `continuum` and `continuum-agent`, runs as a non-root user, and
+defaults to `continuum version`.
+
+```sh
+make container-image IMAGE=continuum:dev VERSION=dev
+docker run --rm continuum:dev version
+```
+
 ## V0 Surface
 
 V0 is observe-first. It can:

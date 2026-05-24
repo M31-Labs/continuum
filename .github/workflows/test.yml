@@ -58,3 +58,17 @@ jobs:
         with:
           go-version: '1.25.10'
       - run: go test -race ./...
+  container-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build container image
+        run: |
+          docker build \
+            --build-arg VERSION=ci \
+            --build-arg COMMIT="${GITHUB_SHA}" \
+            --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t continuum:ci \
+            .
+      - name: Smoke test image
+        run: docker run --rm continuum:ci version

@@ -44,6 +44,19 @@ go build \
   ./cmd/continuum
 ```
 
+## Container Image
+
+Build the local OCI image with the same version metadata:
+
+```sh
+make container-image IMAGE=ghcr.io/m31-labs/continuum:$VERSION VERSION="$VERSION"
+```
+
+The image is a static, non-root runtime image that includes both `continuum`
+and `continuum-agent`. The CI workflow builds and smoke-tests the image on each
+push and pull request. Publishing the image to a registry is intentionally kept
+as an explicit release operation.
+
 ## Signed Audit Schema Artifact
 
 Every tagged release publishes an audit schema documentation artifact and signs
