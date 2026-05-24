@@ -66,10 +66,10 @@ func (m Manifest) ContinuumCapabilities() ([]capability.Capability, error) {
 		return []capability.Capability{cap}, nil
 	}
 	if m.Schema != SchemaV0 {
-		return nil, fmt.Errorf("unsupported Horizon capability schema %q", m.Schema)
+		return nil, fmt.Errorf("unsupported horizon capability schema %q", m.Schema)
 	}
 	if m.Package == "" {
-		return nil, fmt.Errorf("Horizon capability manifest package is required")
+		return nil, fmt.Errorf("horizon capability manifest package is required")
 	}
 	caps := make([]capability.Capability, 0, len(m.Capabilities))
 	for _, declared := range m.Capabilities {

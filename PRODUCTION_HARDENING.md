@@ -136,9 +136,9 @@ enforcement backends exist and are reviewed.
 
 - [x] Add race detector CI job.
 - [x] Add `go vet` to CI.
-- [ ] Add staticcheck CI.
-- [ ] Add govulncheck CI.
-- [ ] Add coverage report generation.
+- [x] Add staticcheck CI.
+- [x] Add govulncheck CI.
+- [x] Add coverage report generation.
 - [ ] Add fuzz tests for event and Horizon envelope decoding.
 - [ ] Add golden tests for daemon error responses.
 - [ ] Add integration test for daemon ingest plus session persistence.

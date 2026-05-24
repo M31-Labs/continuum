@@ -19,7 +19,10 @@ Before tagging:
 - CI is green on `main`
 - `go test ./...` passes locally
 - `go vet ./...` passes locally
+- `staticcheck ./...` passes locally
+- `govulncheck ./...` passes locally with the release Go toolchain
 - `go test -race ./...` passes locally
+- `go test -coverprofile=coverage.out ./...` passes locally
 - `examples/demo-v0.sh` passes locally
 - `PRODUCTION_HARDENING.md` accurately reflects remaining gaps
 - `README.md` and `SECURITY.md` match the release claims

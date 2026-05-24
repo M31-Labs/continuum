@@ -11,7 +11,6 @@ import (
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
-	"m31labs.dev/continuum/event"
 	cruntime "m31labs.dev/continuum/runtime"
 )
 
@@ -155,16 +154,4 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "ingested=%d process_events=%d audit=%s policy=%s deliveries=%s sessions=%s\n", len(events), processEvents, *auditPath, resolvedPolicy, *deliveryPath, *sessionPath)
 	return nil
-}
-
-func runEventsThroughEngine(ctx context.Context, engine *cruntime.Engine, events []event.Event) ([]audit.Event, error) {
-	records := make([]audit.Event, 0, len(events))
-	for _, evt := range events {
-		record, _, err := engine.DecideEvent(ctx, evt)
-		if err != nil {
-			return nil, err
-		}
-		records = append(records, record)
-	}
-	return records, nil
 }

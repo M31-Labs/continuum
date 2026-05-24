@@ -22,7 +22,7 @@ import (
 
 func TestHTTPHandlerServesHealthAndCapabilities(t *testing.T) {
 	daemon := NewDaemon(nil)
-	if err := daemon.Start(nil); err != nil {
+	if err := daemon.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	handler := NewHTTPHandler(daemon)
@@ -385,7 +385,7 @@ func TestHTTPHandlerServesStateStores(t *testing.T) {
 	}
 
 	daemon := NewDaemon(nil)
-	if err := daemon.Start(nil); err != nil {
+	if err := daemon.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	handler := NewHTTPHandlerWithState(daemon, StatePaths{

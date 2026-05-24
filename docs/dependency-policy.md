@@ -17,8 +17,10 @@ Before merging a dependency update:
 - `go test ./...`
 - `go vet ./...`
 - `go test -race ./...`
+- `staticcheck ./...`
+- `govulncheck ./...`
+- `go test -coverprofile=coverage.out ./...`
 - `go mod tidy`
-- `govulncheck ./...` once the CI gate is enabled
 
 ## Review Focus
 
