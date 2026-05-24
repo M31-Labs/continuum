@@ -74,8 +74,9 @@ func runSessions(args []string, stdout, stderr io.Writer) error {
 			enc.SetIndent("", "  ")
 			return enc.Encode(session)
 		}
-		fmt.Fprintf(stdout, "id=%s state=%s subject=%s command=%q policy=%s audit=%s\n",
-			session.ID, session.State, session.Subject.String(), strings.Join(session.Command, " "), session.Policy, session.AuditPath)
+		processes, running := sessionProcessCounts(session)
+		fmt.Fprintf(stdout, "id=%s state=%s subject=%s command=%q policy=%s audit=%s processes=%d running_processes=%d\n",
+			session.ID, session.State, session.Subject.String(), strings.Join(session.Command, " "), session.Policy, session.AuditPath, processes, running)
 		return nil
 	default:
 		return usageError("Usage: continuum sessions list|show [--store .continuum/sessions.json]")
@@ -104,4 +105,11 @@ func findSession(sessions []cruntime.Session, id string) (cruntime.Session, bool
 		}
 	}
 	return cruntime.Session{}, false
+}
+
+func sessionProcessCounts(session cruntime.Session) (int, int) {
+	if session.ProcessTree == nil {
+		return 0, 0
+	}
+	return len(session.ProcessTree.Processes), len(session.ProcessTree.Running())
 }

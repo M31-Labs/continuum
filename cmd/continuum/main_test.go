@@ -350,6 +350,9 @@ func TestRunCommandAuditsSyntheticProcess(t *testing.T) {
 	if !strings.Contains(out.String(), "state=exited") {
 		t.Fatalf("sessions show output = %q", out.String())
 	}
+	if !strings.Contains(out.String(), "processes=1") {
+		t.Fatalf("sessions show output missing process count = %q", out.String())
+	}
 }
 
 func TestGrantCommandPersistsAndLists(t *testing.T) {
@@ -565,6 +568,7 @@ func TestIngestCommandAccumulatesAirlockBehavior(t *testing.T) {
 func TestIngestCommandAcceptsHorizonEnvelope(t *testing.T) {
 	dir := t.TempDir()
 	eventPath := filepath.Join(dir, "horizon.json")
+	sessionPath := filepath.Join(dir, "sessions.json")
 	if err := os.WriteFile(eventPath, []byte(`{
   "id": "hzn_1",
   "capability": "kernel.process.exec.observe",
@@ -575,6 +579,7 @@ func TestIngestCommandAcceptsHorizonEnvelope(t *testing.T) {
     "repo_root": "/repo"
   },
   "fields": {
+    "pid": 777,
     "comm": "go",
     "argv_text": "go test ./...",
     "cwd": "/repo"
@@ -589,12 +594,20 @@ func TestIngestCommandAcceptsHorizonEnvelope(t *testing.T) {
 		"--policy", "../../examples/agent-workdir/policies/main.arb",
 		"--events", eventPath,
 		"--audit", filepath.Join(dir, "audit.jsonl"),
+		"--sessions", sessionPath,
 	}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("ingest horizon: %v\nstderr=%s", err, errOut.String())
 	}
-	if !strings.Contains(out.String(), "ALLOW process.exec go") {
+	if !strings.Contains(out.String(), "ALLOW process.exec go") || !strings.Contains(out.String(), "process_events=1") {
 		t.Fatalf("ingest output = %q", out.String())
+	}
+	sessions, err := cruntime.LoadSessionStore(sessionPath)
+	if err != nil {
+		t.Fatalf("LoadSessionStore: %v", err)
+	}
+	if len(sessions.Sessions) != 1 || sessions.Sessions[0].ProcessTree == nil || sessions.Sessions[0].ProcessTree.RootPID != 777 {
+		t.Fatalf("sessions = %+v", sessions.Sessions)
 	}
 }
 

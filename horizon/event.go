@@ -64,8 +64,10 @@ func ConvertEventEnvelope(envelope EventEnvelope, cap capability.Capability) (ev
 
 func eventKindForOutput(output string) string {
 	switch output {
-	case "ExecEvent":
+	case "ExecEvent", "ProcessExecEvent":
 		return event.KindProcessExec
+	case "ExitEvent", "ProcessExitEvent":
+		return event.KindProcessExit
 	case "FileAccessEvent", "FileEvent":
 		return event.KindFileAccess
 	case "NetworkConnectEvent", "ConnectEvent":

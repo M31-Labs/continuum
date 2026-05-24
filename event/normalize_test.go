@@ -33,6 +33,19 @@ func TestNormalizeNetworkConnect(t *testing.T) {
 	}
 }
 
+func TestNormalizeProcessExecUsesEventPID(t *testing.T) {
+	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
+	facts := Normalize(NewProcessExec(subj, map[string]any{
+		"pid":       456,
+		"comm":      "go",
+		"argv_text": "go test ./...",
+		"cwd":       "/repo",
+	}))
+	if got := facts[1].Fields["pid"]; got != 456 {
+		t.Fatalf("pid = %v", got)
+	}
+}
+
 func TestNormalizeFileSecretGolden(t *testing.T) {
 	evt := testutil.ReadJSON[Event](t, "../testdata/events/file_secret_access.json")
 	testutil.EqualGoldenJSON(t, "../testdata/golden/file_secret_access_facts.json", Normalize(evt))

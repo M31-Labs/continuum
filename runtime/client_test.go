@@ -16,6 +16,9 @@ func TestClientIngestPostsBatch(t *testing.T) {
 		if got := r.URL.Query().Get("delivery-store"); got != "/tmp/deliveries.json" {
 			t.Fatalf("delivery-store query = %q", got)
 		}
+		if got := r.URL.Query().Get("session-store"); got != "/tmp/sessions.json" {
+			t.Fatalf("session-store query = %q", got)
+		}
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{"ingested":1,"policy":"p","audit":"a","records":[]}`))
 	})
@@ -24,6 +27,7 @@ func TestClientIngestPostsBatch(t *testing.T) {
 
 	result, err := NewClient(server.URL).Ingest(context.Background(), []byte(`{"kind":"process.exec"}`), ClientIngestOptions{
 		DeliveryStore: "/tmp/deliveries.json",
+		SessionStore:  "/tmp/sessions.json",
 	})
 	if err != nil {
 		t.Fatalf("Ingest: %v", err)

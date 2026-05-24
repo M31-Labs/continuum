@@ -110,13 +110,14 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	}
 	started := time.Now().UTC()
 	sessions.Upsert(cruntime.Session{
-		ID:        session,
-		Subject:   subj,
-		Command:   append([]string(nil), rest...),
-		Policy:    resolvedPolicy,
-		AuditPath: *auditPath,
-		State:     cruntime.SessionRunning,
-		StartedAt: started,
+		ID:          session,
+		Subject:     subj,
+		Command:     append([]string(nil), rest...),
+		Policy:      resolvedPolicy,
+		AuditPath:   *auditPath,
+		State:       cruntime.SessionRunning,
+		ProcessTree: cruntime.NewProcessLifecycleTree(subj, rest, started),
+		StartedAt:   started,
 	})
 	if err := sessions.Save(*sessionPath); err != nil {
 		_ = cmd.Process.Kill()
@@ -124,6 +125,17 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	for _, evt := range syntheticCommandEvents(subj, absRepo, rest) {
+		if _, changed, err := sessions.TrackProcessEvent(evt, time.Now().UTC()); err != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+			return err
+		} else if changed {
+			if err := sessions.Save(*sessionPath); err != nil {
+				_ = cmd.Process.Kill()
+				_, _ = cmd.Process.Wait()
+				return err
+			}
+		}
 		record, _, err := engine.DecideEvent(context.Background(), evt)
 		if err != nil {
 			_ = cmd.Process.Kill()

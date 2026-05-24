@@ -20,6 +20,7 @@ type Client struct {
 type ClientIngestOptions struct {
 	PolicyPath    string
 	PolicyStore   string
+	SessionStore  string
 	GrantStore    string
 	DeliveryStore string
 	AuditPath     string
@@ -43,6 +44,7 @@ func (c Client) Ingest(ctx context.Context, data []byte, opts ClientIngestOption
 	query := endpoint.Query()
 	addQuery(query, "policy", opts.PolicyPath)
 	addQuery(query, "policy-store", opts.PolicyStore)
+	addQuery(query, "session-store", opts.SessionStore)
 	addQuery(query, "grants", opts.GrantStore)
 	addQuery(query, "delivery-store", opts.DeliveryStore)
 	addQuery(query, "audit", opts.AuditPath)

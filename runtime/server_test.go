@@ -102,6 +102,7 @@ func TestHTTPHandlerIngestsHorizonEnvelope(t *testing.T) {
 		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
 		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
 		Audit:         filepath.Join(dir, "audit.jsonl"),
+		Sessions:      filepath.Join(dir, "sessions.json"),
 		Airlock:       filepath.Join(dir, "airlock.json"),
 	})
 	body := `{
@@ -114,6 +115,7 @@ func TestHTTPHandlerIngestsHorizonEnvelope(t *testing.T) {
     "repo_root": "/repo"
   },
   "fields": {
+    "pid": 321,
     "comm": "go",
     "argv_text": "go test ./...",
     "cwd": "/repo"
@@ -126,6 +128,13 @@ func TestHTTPHandlerIngestsHorizonEnvelope(t *testing.T) {
 	}
 	if !strings.Contains(res.Body.String(), `"decision": "allow"`) || !strings.Contains(res.Body.String(), `kernel.process.exec.observe`) {
 		t.Fatalf("response = %s", res.Body.String())
+	}
+	sessions, err := LoadSessionStore(filepath.Join(dir, "sessions.json"))
+	if err != nil {
+		t.Fatalf("LoadSessionStore: %v", err)
+	}
+	if len(sessions.Sessions) != 1 || sessions.Sessions[0].ProcessTree == nil || sessions.Sessions[0].ProcessTree.RootPID != 321 {
+		t.Fatalf("sessions = %+v", sessions.Sessions)
 	}
 }
 

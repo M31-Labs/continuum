@@ -45,7 +45,7 @@ grants, sessions, and containment state.
       file, and network fixtures.
 - [x] Add an actual delivery queue for source -> engine -> sink/worker flow.
 - [x] Add cgroup identity capture in `continuum run`.
-- [ ] Add process-tree lifecycle tracking beyond the root process.
+- [x] Add process-tree lifecycle tracking beyond the root process.
 - [x] Add explicit containment backend interfaces for cgroup/network namespace
       operations while keeping observe/noop as the default.
 - [x] Add revocation delivery for temporary grants, not only grant-store

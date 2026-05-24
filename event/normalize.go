@@ -15,14 +15,14 @@ func Normalize(evt Event) []arbiterx.Fact {
 	switch evt.Kind {
 	case KindFileAccess, KindFileOpen:
 		facts = append(facts, arbiterx.NewFact(arbiterx.FactFileAccess, evt.Subject, map[string]any{
-			"pid":           evt.Subject.PID,
+			"pid":           pidField(evt),
 			"path":          stringField(evt.Fields, "path"),
 			"op":            stringField(evt.Fields, "op"),
 			"agent_session": evt.Subject.Session,
 		}))
 	case KindNetworkConnect:
 		facts = append(facts, arbiterx.NewFact(arbiterx.FactNetworkConnect, evt.Subject, map[string]any{
-			"pid":           evt.Subject.PID,
+			"pid":           pidField(evt),
 			"host":          stringField(evt.Fields, "host"),
 			"ip":            stringField(evt.Fields, "ip"),
 			"port":          numberField(evt.Fields, "port"),
@@ -30,7 +30,7 @@ func Normalize(evt Event) []arbiterx.Fact {
 		}))
 	case KindProcessExec:
 		facts = append(facts, arbiterx.NewFact(arbiterx.FactProcessExec, evt.Subject, map[string]any{
-			"pid":           evt.Subject.PID,
+			"pid":           pidField(evt),
 			"comm":          stringField(evt.Fields, "comm"),
 			"argv_text":     stringField(evt.Fields, "argv_text"),
 			"cwd":           stringField(evt.Fields, "cwd"),
@@ -38,6 +38,13 @@ func Normalize(evt Event) []arbiterx.Fact {
 		}))
 	}
 	return facts
+}
+
+func pidField(evt Event) int {
+	if pid := numberField(evt.Fields, "pid"); pid != 0 {
+		return pid
+	}
+	return evt.Subject.PID
 }
 
 func stringField(fields map[string]any, key string) string {

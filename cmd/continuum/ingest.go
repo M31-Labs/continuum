@@ -24,6 +24,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	policyStorePath := fs.String("policy-store", ".continuum/policies.json", "policy store")
 	eventsPath := fs.String("events", "", "events JSON or JSONL path")
 	auditPath := fs.String("audit", ".continuum/audit.jsonl", "audit JSONL path")
+	sessionPath := fs.String("sessions", defaultSessionStorePath, "session store for process lifecycle events")
 	grantPath := fs.String("grants", ".continuum/grants.json", "grant store")
 	deliveryPath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	approvalFlag := fs.String("approval", "deny", "approval mode: deny, allow, cli")
@@ -42,6 +43,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	*policyStorePath = resolvePolicyStorePath(*policyStorePath, cfg)
+	*sessionPath = resolveSessionStorePath(*sessionPath, cfg)
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	*airlockStorePath = resolveAirlockStorePath(*airlockStorePath, cfg)
@@ -61,6 +63,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 		result, err := cruntime.NewClient(*daemonURL).Ingest(context.Background(), data, cruntime.ClientIngestOptions{
 			PolicyPath:    resolvedPolicy,
 			PolicyStore:   *policyStorePath,
+			SessionStore:  *sessionPath,
 			GrantStore:    *grantPath,
 			DeliveryStore: *deliveryPath,
 			AuditPath:     *auditPath,
@@ -80,7 +83,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			}
 			fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s reason=%q state=%s audit=%s\n", result.Behavior.Subject, result.Session.Reason, result.Session.State, result.Record.ID)
 		}
-		fmt.Fprintf(stdout, "ingested=%d audit=%s policy=%s daemon=%s\n", result.Ingested, result.Audit, result.Policy, *daemonURL)
+		fmt.Fprintf(stdout, "ingested=%d process_events=%d audit=%s policy=%s daemon=%s\n", result.Ingested, result.ProcessEvents, result.Audit, result.Policy, *daemonURL)
 		return nil
 	}
 	bundle, err := arbiterx.CompileFile(resolvedPolicy)
@@ -120,6 +123,20 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	if err := sink.Close(); err != nil {
 		return err
 	}
+	processEvents := 0
+	sessions, err := cruntime.LoadSessionStore(*sessionPath)
+	if err != nil {
+		return err
+	}
+	processEvents, err = sessions.TrackProcessEvents(events, func() time.Time { return time.Now().UTC() })
+	if err != nil {
+		return err
+	}
+	if processEvents > 0 {
+		if err := sessions.Save(*sessionPath); err != nil {
+			return err
+		}
+	}
 	if !*noAirlock {
 		airlocks, err := cruntime.EvaluateAirlockForEvents(context.Background(), events, cruntime.AirlockOptions{
 			PolicyPath: *airlockPolicyPath,
@@ -136,7 +153,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintf(stdout, "ENTER_AIRLOCK subject=%s reason=%q state=%s audit=%s\n", result.Behavior.Subject, result.Session.Reason, result.Session.State, result.Record.ID)
 		}
 	}
-	fmt.Fprintf(stdout, "ingested=%d audit=%s policy=%s deliveries=%s\n", len(events), *auditPath, resolvedPolicy, *deliveryPath)
+	fmt.Fprintf(stdout, "ingested=%d process_events=%d audit=%s policy=%s deliveries=%s sessions=%s\n", len(events), processEvents, *auditPath, resolvedPolicy, *deliveryPath, *sessionPath)
 	return nil
 }
 

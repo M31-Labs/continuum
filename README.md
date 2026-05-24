@@ -70,6 +70,8 @@ V0 is observe-first. It can:
 - compile and evaluate `.arb` policies with Arbiter
 - inspect published policies with `policy list` and `policy show`
 - create governed sessions for `continuum run`
+- track root and child process lifecycle records for sessions when process
+  events include session identity
 - ingest Continuum event JSON, JSON arrays, JSONL, audit JSONL, or Horizon event envelopes
 - feed local synthetic fixtures through the same source loop used by runtime sources
 - normalize events into facts
@@ -152,7 +154,7 @@ For event handoff, Continuum accepts a Horizon envelope:
   "id": "hzn_1",
   "capability": "kernel.process.exec.observe",
   "subject": {"kind": "agent", "session": "agent-42", "agent_name": "claude", "repo_root": "/repo"},
-  "fields": {"comm": "go", "argv_text": "go test ./...", "cwd": "/repo"}
+  "fields": {"pid": 1234, "comm": "go", "argv_text": "go test ./...", "cwd": "/repo"}
 }
 ```
 
@@ -160,7 +162,7 @@ Pass the manifest directory so Continuum can map `capability` to the emitted
 event type:
 
 ```sh
-continuum ingest --manifest-dir .continuum/capabilities --events horizon-events.jsonl
+continuum ingest --manifest-dir .continuum/capabilities --events horizon-events.jsonl --sessions .continuum/sessions.json
 ```
 
 The local daemon exposes the same path as `POST /ingest` once started with

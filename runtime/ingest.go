@@ -24,6 +24,7 @@ const (
 type IngestOptions struct {
 	PolicyPath    string
 	PolicyStore   string
+	SessionStore  string
 	GrantStore    string
 	DeliveryStore string
 	AuditPath     string
@@ -35,11 +36,12 @@ type IngestOptions struct {
 }
 
 type IngestResult struct {
-	Ingested int             `json:"ingested"`
-	Policy   string          `json:"policy"`
-	Audit    string          `json:"audit"`
-	Records  []audit.Event   `json:"records"`
-	Airlocks []AirlockResult `json:"airlocks,omitempty"`
+	Ingested      int             `json:"ingested"`
+	Policy        string          `json:"policy"`
+	Audit         string          `json:"audit"`
+	ProcessEvents int             `json:"process_events,omitempty"`
+	Records       []audit.Event   `json:"records"`
+	Airlocks      []AirlockResult `json:"airlocks,omitempty"`
 }
 
 func IngestEvents(ctx context.Context, events []event.Event, opts IngestOptions) (IngestResult, error) {
@@ -96,14 +98,31 @@ func IngestEvents(ctx context.Context, events []event.Event, opts IngestOptions)
 		}
 		records = append(records, record)
 	}
+	processEvents := 0
+	if opts.SessionStore != "" {
+		sessions, err := LoadSessionStore(opts.SessionStore)
+		if err != nil {
+			return IngestResult{}, err
+		}
+		processEvents, err = sessions.TrackProcessEvents(events, engine.now)
+		if err != nil {
+			return IngestResult{}, err
+		}
+		if processEvents > 0 {
+			if err := sessions.Save(opts.SessionStore); err != nil {
+				return IngestResult{}, err
+			}
+		}
+	}
 	if err := sink.Close(); err != nil {
 		return IngestResult{}, err
 	}
 	result := IngestResult{
-		Ingested: len(events),
-		Policy:   policyPath,
-		Audit:    opts.AuditPath,
-		Records:  records,
+		Ingested:      len(events),
+		Policy:        policyPath,
+		Audit:         opts.AuditPath,
+		ProcessEvents: processEvents,
+		Records:       records,
 	}
 	if opts.EnableAirlock {
 		airlockOpts := opts.Airlock

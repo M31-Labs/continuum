@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
+	"m31labs.dev/continuum/event"
 	"m31labs.dev/continuum/subject"
 )
 
@@ -20,15 +22,16 @@ const (
 )
 
 type Session struct {
-	ID        string          `json:"id"`
-	Subject   subject.Subject `json:"subject"`
-	Command   []string        `json:"command,omitempty"`
-	Policy    string          `json:"policy,omitempty"`
-	AuditPath string          `json:"audit_path,omitempty"`
-	State     SessionState    `json:"state"`
-	ExitCode  int             `json:"exit_code,omitempty"`
-	StartedAt time.Time       `json:"started_at"`
-	EndedAt   time.Time       `json:"ended_at,omitempty"`
+	ID          string          `json:"id"`
+	Subject     subject.Subject `json:"subject"`
+	Command     []string        `json:"command,omitempty"`
+	Policy      string          `json:"policy,omitempty"`
+	AuditPath   string          `json:"audit_path,omitempty"`
+	State       SessionState    `json:"state"`
+	ExitCode    int             `json:"exit_code,omitempty"`
+	ProcessTree *ProcessTree    `json:"process_tree,omitempty"`
+	StartedAt   time.Time       `json:"started_at"`
+	EndedAt     time.Time       `json:"ended_at,omitempty"`
 }
 
 type SessionStore struct {
@@ -81,12 +84,77 @@ func (s *SessionStore) Finish(id string, state SessionState, exitCode int, ended
 		if s.Sessions[i].ID != id {
 			continue
 		}
-		s.Sessions[i].State = state
-		s.Sessions[i].ExitCode = exitCode
-		s.Sessions[i].EndedAt = endedAt
+		session := &s.Sessions[i]
+		session.State = state
+		session.ExitCode = exitCode
+		session.EndedAt = endedAt
+		processState := ProcessExited
+		if state == SessionFailed {
+			processState = ProcessFailed
+		}
+		tree := session.ensureProcessTree(endedAt)
+		pid := session.Subject.PID
+		if pid == 0 {
+			pid = tree.RootPID
+		}
+		tree.FinishPID(pid, processState, exitCode, endedAt)
 		return s.Sessions[i], nil
 	}
 	return Session{}, fmt.Errorf("session %q not found", id)
+}
+
+func (s *SessionStore) TrackProcessEvent(evt event.Event, now time.Time) (Session, bool, error) {
+	if s == nil {
+		return Session{}, false, fmt.Errorf("nil session store")
+	}
+	if !isProcessLifecycleEvent(evt.Kind) {
+		return Session{}, false, nil
+	}
+	sessionID := processEventSessionID(evt)
+	if sessionID == "" {
+		return Session{}, false, nil
+	}
+	index := s.findIndex(sessionID)
+	if index == -1 {
+		started := processEventTime(evt, now)
+		s.Sessions = append(s.Sessions, Session{
+			ID:        sessionID,
+			Subject:   evt.Subject,
+			State:     SessionRunning,
+			StartedAt: started,
+		})
+		index = len(s.Sessions) - 1
+	}
+	session := &s.Sessions[index]
+	if session.Subject.Empty() {
+		session.Subject = evt.Subject
+	}
+	if session.StartedAt.IsZero() {
+		session.StartedAt = processEventTime(evt, now)
+	}
+	changed := session.ensureProcessTree(now).ObserveEvent(evt, now)
+	if changed {
+		s.applyLifecycleToSession(session, evt, now)
+		s.sort()
+	}
+	return *session, changed, nil
+}
+
+func (s *SessionStore) TrackProcessEvents(events []event.Event, now func() time.Time) (int, error) {
+	if now == nil {
+		now = func() time.Time { return time.Now().UTC() }
+	}
+	changed := 0
+	for _, evt := range events {
+		_, ok, err := s.TrackProcessEvent(evt, now())
+		if err != nil {
+			return changed, err
+		}
+		if ok {
+			changed++
+		}
+	}
+	return changed, nil
 }
 
 func (s *SessionStore) Running() []Session {
@@ -115,4 +183,73 @@ func (s *SessionStore) sort() {
 		}
 		return 1
 	})
+}
+
+func (s *SessionStore) findIndex(id string) int {
+	for i := range s.Sessions {
+		if s.Sessions[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (s *SessionStore) applyLifecycleToSession(session *Session, evt event.Event, now time.Time) {
+	if session == nil || session.ProcessTree == nil {
+		return
+	}
+	if session.Subject.PID == 0 && session.ProcessTree.RootPID != 0 {
+		session.Subject.PID = session.ProcessTree.RootPID
+	}
+	if session.Subject.Cgroup == "" && evt.Subject.Cgroup != "" {
+		session.Subject.Cgroup = evt.Subject.Cgroup
+	}
+	if evt.Kind != event.KindProcessExit {
+		return
+	}
+	pid := processEventPID(evt)
+	if pid == 0 {
+		return
+	}
+	rootPID := session.Subject.PID
+	if rootPID == 0 {
+		rootPID = session.ProcessTree.RootPID
+	}
+	if pid != rootPID {
+		return
+	}
+	exitCode := processExitCode(evt)
+	session.ExitCode = exitCode
+	session.EndedAt = processEventTime(evt, now)
+	if exitCode != 0 || processBoolField(evt.Fields, "failed") {
+		session.State = SessionFailed
+		return
+	}
+	session.State = SessionExited
+}
+
+func (s *Session) ensureProcessTree(now time.Time) *ProcessTree {
+	if s.ProcessTree != nil {
+		return s.ProcessTree
+	}
+	started := s.StartedAt
+	if started.IsZero() {
+		started = now
+	}
+	s.ProcessTree = NewProcessLifecycleTree(s.Subject, s.Command, started)
+	return s.ProcessTree
+}
+
+func isProcessLifecycleEvent(kind string) bool {
+	return kind == event.KindProcessExec || kind == event.KindProcessExit
+}
+
+func processEventSessionID(evt event.Event) string {
+	if evt.Subject.Session != "" {
+		return evt.Subject.Session
+	}
+	if strings.HasPrefix(evt.Subject.ID, "process-tree:") {
+		return strings.TrimPrefix(evt.Subject.ID, "process-tree:")
+	}
+	return ""
 }

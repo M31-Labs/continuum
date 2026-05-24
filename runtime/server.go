@@ -140,6 +140,7 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 		result, err := IngestEvents(r.Context(), events, IngestOptions{
 			PolicyPath:    queryPathAny(r, []string{"policy", "policy_path"}, paths.PolicyBundle),
 			PolicyStore:   queryPathAny(r, []string{"policy-store", "policy_store"}, paths.PolicyStore),
+			SessionStore:  queryPathAny(r, []string{"sessions", "session-store", "session_store"}, paths.Sessions),
 			GrantStore:    queryPathAny(r, []string{"grants", "grant-store", "grant_store"}, paths.Grants),
 			DeliveryStore: queryPathAny(r, []string{"delivery-store", "delivery_store"}, paths.Deliveries),
 			AuditPath:     queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
