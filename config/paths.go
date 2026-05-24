@@ -21,6 +21,7 @@ func Resolve(cfg Config, configPath string) Config {
 	cfg.Audit.Path = ResolvePath(configPath, cfg.Audit.Path)
 	cfg.Capabilities.HorizonManifestDir = ResolvePath(configPath, cfg.Capabilities.HorizonManifestDir)
 	cfg.Capabilities.ManifestSignaturePublicKeys = ResolvePathList(configPath, cfg.Capabilities.ManifestSignaturePublicKeys)
+	cfg.Capabilities.ManifestDigestPins = ResolveDigestPinList(configPath, cfg.Capabilities.ManifestDigestPins)
 	cfg.State.PolicyStore = ResolvePath(configPath, cfg.State.PolicyStore)
 	cfg.State.GrantStore = ResolvePath(configPath, cfg.State.GrantStore)
 	cfg.State.DeliveryStore = ResolvePath(configPath, cfg.State.DeliveryStore)
@@ -38,6 +39,25 @@ func ResolvePathList(configPath, value string) string {
 	parts := strings.Split(value, ",")
 	for i, part := range parts {
 		parts[i] = ResolvePath(configPath, strings.TrimSpace(part))
+	}
+	return strings.Join(parts, ",")
+}
+
+func ResolveDigestPinList(configPath, value string) string {
+	if value == "" {
+		return ""
+	}
+	parts := strings.Split(value, ",")
+	for i, part := range parts {
+		key, digest, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if strings.ContainsAny(key, `/\`) {
+			key = ResolvePath(configPath, key)
+		}
+		parts[i] = key + "=" + strings.TrimSpace(digest)
 	}
 	return strings.Join(parts, ",")
 }

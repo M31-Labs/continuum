@@ -17,6 +17,7 @@ default_mode = "observe"
 horizon_manifest_dir = ".continuum/capabilities"
 manifest_signature_mode = "off"
 manifest_signature_public_keys = ""
+manifest_digest_pins = ""
 
 [state]
 policy_store = ".continuum/policies.json"

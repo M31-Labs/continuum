@@ -36,6 +36,7 @@ type CapabilitiesConfig struct {
 	HorizonManifestDir          string `json:"horizon_manifest_dir"`
 	ManifestSignatureMode       string `json:"manifest_signature_mode,omitempty"`
 	ManifestSignaturePublicKeys string `json:"manifest_signature_public_keys,omitempty"`
+	ManifestDigestPins          string `json:"manifest_digest_pins,omitempty"`
 }
 
 type StateConfig struct {

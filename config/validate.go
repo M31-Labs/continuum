@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -34,6 +35,15 @@ func Validate(cfg Config) error {
 	}
 	if cfg.Capabilities.ManifestSignatureMode == "require" && cfg.Capabilities.ManifestSignaturePublicKeys == "" {
 		return fmt.Errorf("capabilities.manifest_signature_public_keys is required when manifest_signature_mode is require")
+	}
+	for _, pin := range strings.Split(cfg.Capabilities.ManifestDigestPins, ",") {
+		pin = strings.TrimSpace(pin)
+		if pin == "" {
+			continue
+		}
+		if _, _, ok := strings.Cut(pin, "="); !ok {
+			return fmt.Errorf("capabilities.manifest_digest_pins entry %q must be path=sha256", pin)
+		}
 	}
 	maxTTL, err := time.ParseDuration(cfg.Grant.MaxTTL)
 	if err != nil {

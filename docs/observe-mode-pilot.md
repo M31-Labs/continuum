@@ -41,6 +41,7 @@ default_mode = "ask"
 horizon_manifest_dir = "/etc/continuum/capabilities"
 manifest_signature_mode = "off"
 manifest_signature_public_keys = ""
+manifest_digest_pins = ""
 
 [state]
 policy_store = "/var/lib/continuum/policies.json"

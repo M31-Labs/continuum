@@ -164,6 +164,40 @@ func TestLoadDirWarnsOnUnsignedManifest(t *testing.T) {
 	}
 }
 
+func TestLoadDirVerifiesDigestPin(t *testing.T) {
+	dir := copyManifestFixture(t)
+	path := filepath.Join(dir, "exec.cap.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caps, err := LoadDirWithOptions(dir, LoadOptions{
+		DigestPins: map[string]string{"exec.cap.json": SHA256Hex(data)},
+	})
+	if err != nil {
+		t.Fatalf("LoadDirWithOptions: %v", err)
+	}
+	if len(caps) != 1 {
+		t.Fatalf("caps = %+v", caps)
+	}
+	if got := caps[0].Metadata["continuum.horizon.manifest_digest.verified"]; got != true {
+		t.Fatalf("digest verified metadata = %#v", got)
+	}
+	if got := caps[0].Metadata["continuum.horizon.manifest_digest.actual"]; got != SHA256Hex(data) {
+		t.Fatalf("digest actual metadata = %#v", got)
+	}
+}
+
+func TestLoadDirRejectsDigestPinMismatch(t *testing.T) {
+	dir := copyManifestFixture(t)
+	_, err := LoadDirWithOptions(dir, LoadOptions{
+		DigestPins: map[string]string{"exec.cap.json": strings.Repeat("0", 64)},
+	})
+	if err == nil || !strings.Contains(err.Error(), "sha256 digest pin mismatch") {
+		t.Fatalf("LoadDirWithOptions error = %v", err)
+	}
+}
+
 func writeSignedManifestFixture(t *testing.T) (string, ed25519.PublicKey) {
 	t.Helper()
 	dir := copyManifestFixture(t)

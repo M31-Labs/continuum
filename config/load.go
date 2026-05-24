@@ -132,6 +132,8 @@ func assign(cfg *Config, section, key, value string) error {
 			cfg.Capabilities.ManifestSignatureMode = value
 		case "manifest_signature_public_keys":
 			cfg.Capabilities.ManifestSignaturePublicKeys = value
+		case "manifest_digest_pins":
+			cfg.Capabilities.ManifestDigestPins = value
 		default:
 			return unknown(section, key)
 		}

@@ -25,10 +25,12 @@ func runCapabilities(args []string, stdout, stderr io.Writer) error {
 	signatureMode := fs.String("signature-mode", "off", "manifest signature mode: off, warn, or require")
 	var signatureKeys repeatStringFlag
 	fs.Var(&signatureKeys, "signature-key", "trusted Ed25519 manifest public key path; may be repeated or comma-separated")
+	var digestPins repeatStringFlag
+	fs.Var(&digestPins, "digest-pin", "trusted manifest digest pin path=sha256; may be repeated or comma-separated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	loadOptions, err := horizonLoadOptionsFromValues(*signatureMode, signatureKeys.String())
+	loadOptions, err := horizonLoadOptionsFromValues(*signatureMode, signatureKeys.String(), digestPins.String())
 	if err != nil {
 		return err
 	}
@@ -61,13 +63,15 @@ func runCapabilitiesInspect(args []string, stdout, stderr io.Writer) error {
 	signatureMode := fs.String("signature-mode", "off", "manifest signature mode: off, warn, or require")
 	var signatureKeys repeatStringFlag
 	fs.Var(&signatureKeys, "signature-key", "trusted Ed25519 manifest public key path; may be repeated or comma-separated")
+	var digestPins repeatStringFlag
+	fs.Var(&digestPins, "digest-pin", "trusted manifest digest pin path=sha256; may be repeated or comma-separated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return usageError("Usage: continuum capabilities inspect [--json] [--signature-mode off|warn|require] [--signature-key key.pub] <path>")
+		return usageError("Usage: continuum capabilities inspect [--json] [--signature-mode off|warn|require] [--signature-key key.pub] [--digest-pin path=sha256] <path>")
 	}
-	loadOptions, err := horizonLoadOptionsFromValues(*signatureMode, signatureKeys.String())
+	loadOptions, err := horizonLoadOptionsFromValues(*signatureMode, signatureKeys.String(), digestPins.String())
 	if err != nil {
 		return err
 	}
@@ -89,6 +93,9 @@ func runCapabilitiesInspect(args []string, stdout, stderr io.Writer) error {
 	}
 	if inspection.Signature != nil {
 		fmt.Fprintf(stdout, "signature mode=%s signed=%v verified=%v key_id=%s path=%s error=%q\n", inspection.Signature.Mode, inspection.Signature.Signed, inspection.Signature.Verified, inspection.Signature.KeyID, inspection.Signature.SignaturePath, inspection.Signature.Error)
+	}
+	if inspection.Digest != nil {
+		fmt.Fprintf(stdout, "digest pinned=%v verified=%v pin_key=%s actual=%s expected=%s error=%q\n", inspection.Digest.Pinned, inspection.Digest.Verified, inspection.Digest.PinKey, inspection.Digest.Actual, inspection.Digest.Expected, inspection.Digest.Error)
 	}
 	for _, cap := range inspection.Capabilities {
 		fmt.Fprintf(stdout, "capability name=%s kind=%s owner=%s danger=%s output=%s input=%s\n", cap.Name, cap.Kind, cap.Owner, cap.Danger, cap.Output, cap.Input)

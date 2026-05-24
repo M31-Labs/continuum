@@ -12,7 +12,13 @@ import (
 )
 
 type LoadOptions struct {
-	Signature SignatureOptions
+	Signature  SignatureOptions
+	DigestPins map[string]string
+}
+
+type ManifestVerification struct {
+	Digest    DigestVerification    `json:"digest,omitempty"`
+	Signature SignatureVerification `json:"signature,omitempty"`
 }
 
 func LoadFile(path string) (Manifest, error) {
@@ -20,12 +26,17 @@ func LoadFile(path string) (Manifest, error) {
 	return manifest, err
 }
 
-func LoadFileWithOptions(path string, opts LoadOptions) (Manifest, SignatureVerification, error) {
+func LoadFileWithOptions(path string, opts LoadOptions) (Manifest, ManifestVerification, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Manifest{}, SignatureVerification{}, fmt.Errorf("read manifest %s: %w", path, err)
+		return Manifest{}, ManifestVerification{}, fmt.Errorf("read manifest %s: %w", path, err)
 	}
-	verification, err := VerifyManifestSignature(path, data, opts.Signature)
+	digest, err := VerifyManifestDigestPin(path, data, opts.DigestPins)
+	if err != nil {
+		return Manifest{}, ManifestVerification{Digest: digest}, err
+	}
+	signature, err := VerifyManifestSignature(path, data, opts.Signature)
+	verification := ManifestVerification{Digest: digest, Signature: signature}
 	if err != nil {
 		return Manifest{}, verification, err
 	}
@@ -64,7 +75,7 @@ func LoadDirWithOptions(dir string, opts LoadOptions) ([]capability.Capability, 
 		if err != nil {
 			return nil, err
 		}
-		manifestCaps = annotateSignature(manifestCaps, verification)
+		manifestCaps = annotateManifestVerification(manifestCaps, verification)
 		caps = append(caps, manifestCaps...)
 	}
 	slices.SortFunc(caps, func(a, b capability.Capability) int {
@@ -73,8 +84,9 @@ func LoadDirWithOptions(dir string, opts LoadOptions) ([]capability.Capability, 
 	return caps, nil
 }
 
-func annotateSignature(caps []capability.Capability, verification SignatureVerification) []capability.Capability {
-	if verification.Mode == SignatureOff && !verification.Signed && !verification.Verified && verification.Error == "" {
+func annotateManifestVerification(caps []capability.Capability, verification ManifestVerification) []capability.Capability {
+	if verification.Digest == (DigestVerification{}) &&
+		verification.Signature.Mode == SignatureOff && !verification.Signature.Signed && !verification.Signature.Verified && verification.Signature.Error == "" {
 		return caps
 	}
 	out := make([]capability.Capability, len(caps))
@@ -84,23 +96,41 @@ func annotateSignature(caps []capability.Capability, verification SignatureVerif
 		for key, value := range cap.Metadata {
 			metadata[key] = value
 		}
-		metadata["continuum.horizon.manifest_signature.mode"] = string(verification.Mode)
-		metadata["continuum.horizon.manifest_signature.signed"] = verification.Signed
-		metadata["continuum.horizon.manifest_signature.verified"] = verification.Verified
-		if verification.Algorithm != "" {
-			metadata["continuum.horizon.manifest_signature.algorithm"] = verification.Algorithm
+		if verification.Digest != (DigestVerification{}) {
+			metadata["continuum.horizon.manifest_digest.pinned"] = verification.Digest.Pinned
+			metadata["continuum.horizon.manifest_digest.verified"] = verification.Digest.Verified
+			if verification.Digest.PinKey != "" {
+				metadata["continuum.horizon.manifest_digest.pin_key"] = verification.Digest.PinKey
+			}
+			if verification.Digest.Expected != "" {
+				metadata["continuum.horizon.manifest_digest.expected"] = verification.Digest.Expected
+			}
+			if verification.Digest.Actual != "" {
+				metadata["continuum.horizon.manifest_digest.actual"] = verification.Digest.Actual
+			}
+			if verification.Digest.Error != "" {
+				metadata["continuum.horizon.manifest_digest.error"] = verification.Digest.Error
+			}
 		}
-		if verification.KeyID != "" {
-			metadata["continuum.horizon.manifest_signature.key_id"] = verification.KeyID
+		if verification.Signature.Mode != SignatureOff || verification.Signature.Signed || verification.Signature.Verified || verification.Signature.Error != "" {
+			metadata["continuum.horizon.manifest_signature.mode"] = string(verification.Signature.Mode)
+			metadata["continuum.horizon.manifest_signature.signed"] = verification.Signature.Signed
+			metadata["continuum.horizon.manifest_signature.verified"] = verification.Signature.Verified
 		}
-		if verification.KeyFingerprint != "" {
-			metadata["continuum.horizon.manifest_signature.key_fingerprint"] = verification.KeyFingerprint
+		if verification.Signature.Algorithm != "" {
+			metadata["continuum.horizon.manifest_signature.algorithm"] = verification.Signature.Algorithm
 		}
-		if verification.SignaturePath != "" {
-			metadata["continuum.horizon.manifest_signature.path"] = verification.SignaturePath
+		if verification.Signature.KeyID != "" {
+			metadata["continuum.horizon.manifest_signature.key_id"] = verification.Signature.KeyID
 		}
-		if verification.Error != "" {
-			metadata["continuum.horizon.manifest_signature.error"] = verification.Error
+		if verification.Signature.KeyFingerprint != "" {
+			metadata["continuum.horizon.manifest_signature.key_fingerprint"] = verification.Signature.KeyFingerprint
+		}
+		if verification.Signature.SignaturePath != "" {
+			metadata["continuum.horizon.manifest_signature.path"] = verification.Signature.SignaturePath
+		}
+		if verification.Signature.Error != "" {
+			metadata["continuum.horizon.manifest_signature.error"] = verification.Signature.Error
 		}
 		out[i].Metadata = metadata
 	}

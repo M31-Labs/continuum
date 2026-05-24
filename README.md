@@ -125,6 +125,7 @@ path = ".continuum/audit.jsonl"
 horizon_manifest_dir = ".continuum/capabilities"
 manifest_signature_mode = "off"
 manifest_signature_public_keys = ""
+manifest_digest_pins = ""
 
 [state]
 policy_store = ".continuum/policies.json"
@@ -185,6 +186,7 @@ sidecars named `<manifest>.sig` over the exact `.cap.json` bytes:
 horizon_manifest_dir = ".continuum/capabilities"
 manifest_signature_mode = "require"
 manifest_signature_public_keys = "/etc/continuum/horizon.pub"
+manifest_digest_pins = "exec.cap.json=sha256:<sha256-hex>"
 ```
 
 `continuum capabilities inspect <path>` recognizes `.hzn` source, `.cap.json`

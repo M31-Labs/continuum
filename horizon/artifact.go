@@ -39,6 +39,7 @@ type ArtifactInspection struct {
 	Message      string                  `json:"message,omitempty"`
 	Artifacts    []ArtifactRef           `json:"artifacts,omitempty"`
 	Capabilities []capability.Capability `json:"capabilities,omitempty"`
+	Digest       *DigestVerification     `json:"digest,omitempty"`
 	Signature    *SignatureVerification  `json:"signature,omitempty"`
 }
 
@@ -101,6 +102,7 @@ func inspectPackageDir(dir string, opts LoadOptions) (ArtifactInspection, error)
 	}
 	var artifacts []ArtifactRef
 	var caps []capability.Capability
+	var digest *DigestVerification
 	var signature *SignatureVerification
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -116,6 +118,9 @@ func inspectPackageDir(dir string, opts LoadOptions) (ArtifactInspection, error)
 			}
 			artifacts = append(artifacts, inspection.Artifacts...)
 			caps = append(caps, annotateCapabilities(inspection.Capabilities, dir, inspection.Artifacts)...)
+			if inspection.Digest != nil {
+				digest = inspection.Digest
+			}
 			if inspection.Signature != nil {
 				signature = inspection.Signature
 			}
@@ -140,6 +145,7 @@ func inspectPackageDir(dir string, opts LoadOptions) (ArtifactInspection, error)
 		Message:      "Horizon exported package inspected; Continuum registers declarations and records artifacts only",
 		Artifacts:    artifacts,
 		Capabilities: caps,
+		Digest:       digest,
 		Signature:    signature,
 	}, nil
 }
@@ -157,7 +163,7 @@ func inspectManifestFile(path string, packageArtifacts []ArtifactRef, opts LoadO
 	if err != nil {
 		return ArtifactInspection{}, err
 	}
-	caps = annotateSignature(caps, verification)
+	caps = annotateManifestVerification(caps, verification)
 	artifacts := append([]ArtifactRef{ref}, packageArtifacts...)
 	caps = annotateCapabilities(caps, filepath.Dir(path), artifacts)
 	inspection := ArtifactInspection{
@@ -167,8 +173,11 @@ func inspectManifestFile(path string, packageArtifacts []ArtifactRef, opts LoadO
 		Artifacts:    artifacts,
 		Capabilities: caps,
 	}
-	if verification.Mode != SignatureOff || verification.Signed || verification.Verified || verification.Error != "" {
-		inspection.Signature = &verification
+	if verification.Digest != (DigestVerification{}) {
+		inspection.Digest = &verification.Digest
+	}
+	if verification.Signature.Mode != SignatureOff || verification.Signature.Signed || verification.Signature.Verified || verification.Signature.Error != "" {
+		inspection.Signature = &verification.Signature
 	}
 	return inspection, nil
 }

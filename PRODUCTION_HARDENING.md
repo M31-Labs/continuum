@@ -48,7 +48,7 @@ enforcement backends exist and are reviewed.
 - [x] Add policy bundle provenance metadata.
 - [x] Add policy activation rollback.
 - [x] Add signed capability manifest support.
-- [ ] Add capability manifest digest pinning in config.
+- [x] Add capability manifest digest pinning in config.
 - [x] Add warning output for privileged/destructive capabilities.
 - [x] Add route tests for every built-in outcome.
 - [x] Add replay gates that compare candidate policy decisions against baseline.

@@ -80,7 +80,7 @@ func TestLoadGrantConfig(t *testing.T) {
 }
 
 func TestLoadCapabilitySignatureConfig(t *testing.T) {
-	cfg, err := LoadBytes([]byte("[capabilities]\nhorizon_manifest_dir = \"caps\"\nmanifest_signature_mode = \"warn\"\nmanifest_signature_public_keys = \"keys/a.pub,keys/b.pub\"\n"))
+	cfg, err := LoadBytes([]byte("[capabilities]\nhorizon_manifest_dir = \"caps\"\nmanifest_signature_mode = \"warn\"\nmanifest_signature_public_keys = \"keys/a.pub,keys/b.pub\"\nmanifest_digest_pins = \"exec.cap.json=sha256:abcdef\"\n"))
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -90,12 +90,22 @@ func TestLoadCapabilitySignatureConfig(t *testing.T) {
 	if cfg.Capabilities.ManifestSignaturePublicKeys != "keys/a.pub,keys/b.pub" {
 		t.Fatalf("signature keys = %q", cfg.Capabilities.ManifestSignaturePublicKeys)
 	}
+	if cfg.Capabilities.ManifestDigestPins != "exec.cap.json=sha256:abcdef" {
+		t.Fatalf("digest pins = %q", cfg.Capabilities.ManifestDigestPins)
+	}
 }
 
 func TestLoadRejectsRequireSignatureWithoutKeys(t *testing.T) {
 	_, err := LoadBytes([]byte("[capabilities]\nmanifest_signature_mode = \"require\"\n"))
 	if err == nil {
 		t.Fatal("expected require signature without keys error")
+	}
+}
+
+func TestLoadRejectsMalformedDigestPin(t *testing.T) {
+	_, err := LoadBytes([]byte("[capabilities]\nmanifest_digest_pins = \"exec.cap.json\"\n"))
+	if err == nil {
+		t.Fatal("expected malformed digest pin error")
 	}
 }
 
@@ -129,5 +139,11 @@ func TestResolvePathsRelativeToConfig(t *testing.T) {
 	wantKeys := filepath.Join("examples", "agent-workdir", "keys", "a.pub") + ",/etc/continuum/b.pub"
 	if resolved.Capabilities.ManifestSignaturePublicKeys != wantKeys {
 		t.Fatalf("signature keys = %q", resolved.Capabilities.ManifestSignaturePublicKeys)
+	}
+	cfg.Capabilities.ManifestDigestPins = "caps/exec.cap.json=abc,network.cap.json=def"
+	resolved = Resolve(cfg, filepath.Join("examples", "agent-workdir", "continuum.toml"))
+	wantPins := filepath.Join("examples", "agent-workdir", "caps", "exec.cap.json") + "=abc,network.cap.json=def"
+	if resolved.Capabilities.ManifestDigestPins != wantPins {
+		t.Fatalf("digest pins = %q", resolved.Capabilities.ManifestDigestPins)
 	}
 }
