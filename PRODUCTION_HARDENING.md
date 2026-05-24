@@ -106,7 +106,7 @@ enforcement backends exist and are reviewed.
 - [x] Add subject identity merge tests for session, cgroup, and repo subjects.
 - [x] Add `continuum run` environment redaction in audit/session output.
 - [x] Add child-process synthetic fixture coverage.
-- [ ] Add daemon-side source lifecycle health for all registered sources.
+- [x] Add daemon-side source lifecycle health for all registered sources.
 - [ ] Add bounded source loop backpressure.
 
 ## Airlock Readiness

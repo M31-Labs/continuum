@@ -10,12 +10,13 @@ import (
 )
 
 type Daemon struct {
-	Registry *capability.Registry
-	Provider horizon.Provider
+	Registry     *capability.Registry
+	Provider     horizon.Provider
+	sourceHealth *SourceHealthStore
 }
 
 func NewDaemon(provider horizon.Provider) *Daemon {
-	return &Daemon{Registry: capability.NewRegistry(), Provider: provider}
+	return &Daemon{Registry: capability.NewRegistry(), Provider: provider, sourceHealth: NewSourceHealthStore()}
 }
 
 func (d *Daemon) Start(ctx context.Context) error {
@@ -39,6 +40,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}
 	}
 	if d.Provider == nil {
+		d.refreshSourceHealth()
 		return nil
 	}
 	caps, err := d.Provider.LoadCapabilities(ctx)
@@ -50,5 +52,34 @@ func (d *Daemon) Start(ctx context.Context) error {
 			return err
 		}
 	}
+	d.refreshSourceHealth()
 	return nil
+}
+
+func (d *Daemon) RunSource(ctx context.Context, src capability.Source, handler EventHandler) error {
+	if d == nil {
+		return fmt.Errorf("nil daemon")
+	}
+	return RunSourceWithHealth(ctx, src, handler, d.ensureSourceHealth())
+}
+
+func (d *Daemon) SourceHealth() []SourceHealth {
+	if d == nil || d.sourceHealth == nil {
+		return nil
+	}
+	return d.sourceHealth.List()
+}
+
+func (d *Daemon) refreshSourceHealth() {
+	if d == nil || d.Registry == nil {
+		return
+	}
+	d.ensureSourceHealth().RegisterCapabilities(d.Registry.List())
+}
+
+func (d *Daemon) ensureSourceHealth() *SourceHealthStore {
+	if d.sourceHealth == nil {
+		d.sourceHealth = NewSourceHealthStore()
+	}
+	return d.sourceHealth
 }

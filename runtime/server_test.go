@@ -21,7 +21,7 @@ import (
 )
 
 func TestHTTPHandlerServesHealthAndCapabilities(t *testing.T) {
-	daemon := NewDaemon(nil)
+	daemon := NewDaemon(staticCapabilityProvider{caps: []capability.Capability{sourceCapability("kernel.process.exec.observe")}})
 	if err := daemon.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -35,6 +35,9 @@ func TestHTTPHandlerServesHealthAndCapabilities(t *testing.T) {
 		}
 		if !strings.Contains(res.Header().Get("content-type"), "application/json") {
 			t.Fatalf("%s content-type = %s", path, res.Header().Get("content-type"))
+		}
+		if path == "/healthz" && !strings.Contains(res.Body.String(), `"source_health"`) {
+			t.Fatalf("%s body missing source health: %s", path, res.Body.String())
 		}
 	}
 }
