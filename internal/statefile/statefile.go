@@ -2,15 +2,67 @@ package statefile
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
 	DirMode  os.FileMode = 0700
 	FileMode os.FileMode = 0600
 )
+
+type CorruptError struct {
+	Path          string
+	PreservedPath string
+	Err           error
+}
+
+func (e *CorruptError) Error() string {
+	return fmt.Sprintf("parse state file %s: %v; preserved corrupt copy at %s", e.Path, e.Err, e.PreservedPath)
+}
+
+func (e *CorruptError) Unwrap() error {
+	return e.Err
+}
+
+// ReadJSON decodes a state file into target. Missing files return ok=false.
+// Corrupt JSON is copied beside the original before a CorruptError is returned.
+func ReadJSON(path string, target any) (bool, error) {
+	if path == "" {
+		return false, fmt.Errorf("state file path is required")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read state file %s: %w", path, err)
+	}
+	if err := json.Unmarshal(data, target); err != nil {
+		preservedPath, preserveErr := PreserveCorrupt(path, data)
+		if preserveErr != nil {
+			return true, fmt.Errorf("parse state file %s: %w; preserve corrupt copy: %v", path, err, preserveErr)
+		}
+		return true, &CorruptError{Path: path, PreservedPath: preservedPath, Err: err}
+	}
+	return true, nil
+}
+
+// PreserveCorrupt writes a private copy of corrupt state bytes beside path.
+func PreserveCorrupt(path string, data []byte) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("state file path is required")
+	}
+	name := fmt.Sprintf("%s.corrupt.%s", filepath.Base(path), time.Now().UTC().Format("20060102T150405.000000000Z"))
+	preservedPath := filepath.Join(filepath.Dir(path), name)
+	if err := WriteMode(preservedPath, data, FileMode); err != nil {
+		return "", err
+	}
+	return preservedPath, nil
+}
 
 func WriteJSON(path string, value any) error {
 	return WithLock(path, func() error {

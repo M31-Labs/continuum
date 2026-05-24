@@ -1,9 +1,7 @@
 package capability
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -17,15 +15,8 @@ type GrantStore struct {
 
 func LoadGrantStore(path string) (*GrantStore, error) {
 	store := &GrantStore{}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return store, nil
-		}
-		return nil, fmt.Errorf("read grant store %s: %w", path, err)
-	}
-	if err := json.Unmarshal(data, store); err != nil {
-		return nil, fmt.Errorf("parse grant store %s: %w", path, err)
+	if _, err := statefile.ReadJSON(path, store); err != nil {
+		return nil, fmt.Errorf("load grant store %s: %w", path, err)
 	}
 	return store, nil
 }

@@ -2,6 +2,7 @@ package statefile
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -73,6 +74,40 @@ func TestOpenAppendCreatesPrivateFile(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != FileMode {
 		t.Fatalf("file mode = %v, want %v", got, FileMode)
+	}
+}
+
+func TestReadJSONPreservesCorruptState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state", "store.json")
+	if err := os.MkdirAll(filepath.Dir(path), DirMode); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	bad := []byte(`{"unterminated":`)
+	if err := os.WriteFile(path, bad, FileMode); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var target map[string]any
+	ok, err := ReadJSON(path, &target)
+	if !ok {
+		t.Fatal("ReadJSON ok = false, want true")
+	}
+	var corrupt *CorruptError
+	if !errors.As(err, &corrupt) {
+		t.Fatalf("ReadJSON error = %v, want CorruptError", err)
+	}
+	preserved, err := os.ReadFile(corrupt.PreservedPath)
+	if err != nil {
+		t.Fatalf("ReadFile preserved: %v", err)
+	}
+	if string(preserved) != string(bad) {
+		t.Fatalf("preserved bytes = %q, want %q", preserved, bad)
+	}
+	info, err := os.Stat(corrupt.PreservedPath)
+	if err != nil {
+		t.Fatalf("Stat preserved: %v", err)
+	}
+	if got := info.Mode().Perm(); got != FileMode {
+		t.Fatalf("preserved mode = %v, want %v", got, FileMode)
 	}
 }
 

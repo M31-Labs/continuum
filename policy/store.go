@@ -1,9 +1,7 @@
 package policy
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"m31labs.dev/continuum/internal/statefile"
@@ -25,15 +23,8 @@ type StoredBundle struct {
 
 func LoadStore(path string) (*Store, error) {
 	store := &Store{Path: path, Bundles: map[string]StoredBundle{}}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return store, nil
-		}
-		return nil, fmt.Errorf("read policy store %s: %w", path, err)
-	}
-	if err := json.Unmarshal(data, store); err != nil {
-		return nil, fmt.Errorf("parse policy store %s: %w", path, err)
+	if _, err := statefile.ReadJSON(path, store); err != nil {
+		return nil, fmt.Errorf("load policy store %s: %w", path, err)
 	}
 	store.Path = path
 	if store.Bundles == nil {

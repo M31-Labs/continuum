@@ -1,9 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -40,15 +38,8 @@ type SessionStore struct {
 
 func LoadSessionStore(path string) (*SessionStore, error) {
 	store := &SessionStore{}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return store, nil
-		}
-		return nil, fmt.Errorf("read session store %s: %w", path, err)
-	}
-	if err := json.Unmarshal(data, store); err != nil {
-		return nil, fmt.Errorf("parse session store %s: %w", path, err)
+	if _, err := statefile.ReadJSON(path, store); err != nil {
+		return nil, fmt.Errorf("load session store %s: %w", path, err)
 	}
 	return store, nil
 }

@@ -1,9 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -43,15 +41,8 @@ type DeliveryStore struct {
 
 func LoadDeliveryStore(path string) (*DeliveryStore, error) {
 	store := &DeliveryStore{Path: path}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return store, nil
-		}
-		return nil, fmt.Errorf("read delivery store %s: %w", path, err)
-	}
-	if err := json.Unmarshal(data, store); err != nil {
-		return nil, fmt.Errorf("parse delivery store %s: %w", path, err)
+	if _, err := statefile.ReadJSON(path, store); err != nil {
+		return nil, fmt.Errorf("load delivery store %s: %w", path, err)
 	}
 	store.Path = path
 	return store, nil

@@ -1,9 +1,7 @@
 package airlock
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"slices"
 	"sync"
 	"time"
@@ -23,16 +21,9 @@ func NewStore() *Store {
 
 func LoadStore(path string) (*Store, error) {
 	store := NewStore()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return store, nil
-		}
-		return nil, fmt.Errorf("read airlock store %s: %w", path, err)
-	}
 	var sessions []Session
-	if err := json.Unmarshal(data, &sessions); err != nil {
-		return nil, fmt.Errorf("parse airlock store %s: %w", path, err)
+	if _, err := statefile.ReadJSON(path, &sessions); err != nil {
+		return nil, fmt.Errorf("load airlock store %s: %w", path, err)
 	}
 	for _, session := range sessions {
 		store.sessions[session.ID] = session
