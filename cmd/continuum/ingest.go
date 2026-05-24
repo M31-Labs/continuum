@@ -121,7 +121,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		printAuditLine(stdout, record)
-		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, record, evt, *grantPath, maxGrantTTL); err != nil {
+		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, sink, record, evt, *grantPath, maxGrantTTL); err != nil {
 			return err
 		}
 	}

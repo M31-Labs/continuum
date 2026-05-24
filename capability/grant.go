@@ -10,15 +10,16 @@ import (
 )
 
 type Grant struct {
-	ID         string         `json:"id"`
-	Session    string         `json:"session"`
-	Capability string         `json:"capability"`
-	Scope      map[string]any `json:"scope,omitempty"`
-	Reason     string         `json:"reason,omitempty"`
-	CreatedAt  time.Time      `json:"created_at"`
-	ExpiresAt  time.Time      `json:"expires_at"`
-	RevokedAt  time.Time      `json:"revoked_at,omitempty"`
-	Renewals   []GrantRenewal `json:"renewals,omitempty"`
+	ID         string            `json:"id"`
+	Session    string            `json:"session"`
+	Capability string            `json:"capability"`
+	Scope      map[string]any    `json:"scope,omitempty"`
+	Requester  *subject.Identity `json:"requester,omitempty"`
+	Reason     string            `json:"reason,omitempty"`
+	CreatedAt  time.Time         `json:"created_at"`
+	ExpiresAt  time.Time         `json:"expires_at"`
+	RevokedAt  time.Time         `json:"revoked_at,omitempty"`
+	Renewals   []GrantRenewal    `json:"renewals,omitempty"`
 }
 
 type GrantRenewal struct {
@@ -48,6 +49,11 @@ func (g Grant) Fact(subj subject.Subject) arbiterx.Fact {
 	}
 	if !g.ExpiresAt.IsZero() {
 		fields["expires_at"] = g.ExpiresAt.Format(time.RFC3339)
+	}
+	if g.Requester != nil {
+		fields["requester"] = g.Requester.Subject
+		fields["requester_session"] = g.Requester.Session
+		fields["requester_agent"] = g.Requester.AgentName
 	}
 	return arbiterx.NewFact(arbiterx.FactCapabilityGrant, subj, fields)
 }

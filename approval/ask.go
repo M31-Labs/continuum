@@ -1,11 +1,16 @@
 package approval
 
-import "context"
+import (
+	"context"
+
+	"m31labs.dev/continuum/subject"
+)
 
 type Request struct {
-	Session  string `json:"session,omitempty"`
-	Question string `json:"question"`
-	Risk     string `json:"risk,omitempty"`
+	Session   string            `json:"session,omitempty"`
+	Requester *subject.Identity `json:"requester,omitempty"`
+	Question  string            `json:"question"`
+	Risk      string            `json:"risk,omitempty"`
 }
 
 type Response struct {

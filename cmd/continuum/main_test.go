@@ -1167,6 +1167,9 @@ func TestIngestApprovalAllowCreatesGrant(t *testing.T) {
 	if len(store.Grants) != 1 || store.Grants[0].Reason == "" {
 		t.Fatalf("approval grant missing reason: %+v", store.Grants)
 	}
+	if store.Grants[0].Requester == nil || store.Grants[0].Requester.Session != "agent-42" || store.Grants[0].Requester.AgentName != "claude" {
+		t.Fatalf("approval grant missing requester identity: %+v", store.Grants[0].Requester)
+	}
 	out.Reset()
 	if err := run([]string{
 		"ingest",
@@ -1180,6 +1183,64 @@ func TestIngestApprovalAllowCreatesGrant(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ALLOW file.access") || strings.Contains(out.String(), "approval=denied") {
 		t.Fatalf("grant-backed ingest output = %q", out.String())
+	}
+}
+
+func TestIngestApprovalDenyWritesAuditEvent(t *testing.T) {
+	dir := t.TempDir()
+	eventPath := filepath.Join(dir, "ci-write.json")
+	if err := os.WriteFile(eventPath, []byte(`{
+  "id": "evt_ci",
+  "kind": "file.access",
+  "subject": {
+    "kind": "agent",
+    "session": "agent-42",
+    "agent_name": "claude",
+    "repo_root": "/repo"
+  },
+  "fields": {
+    "path": "/repo/.github/workflows/test.yml",
+    "op": "write"
+  }
+}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	auditPath := filepath.Join(dir, "audit.jsonl")
+	var out, errOut bytes.Buffer
+	err := run([]string{
+		"ingest",
+		"--policy", "../../examples/agent-workdir/policies/main.arb",
+		"--events", eventPath,
+		"--audit", auditPath,
+		"--grants", filepath.Join(dir, "grants.json"),
+		"--approval", "deny",
+		"--no-airlock",
+	}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("ingest approval deny: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "approval=denied") || !strings.Contains(out.String(), "audit=evt_ci_approval_denied") {
+		t.Fatalf("approval deny output = %q", out.String())
+	}
+	events, err := audit.ReadJSONL(auditPath)
+	if err != nil {
+		t.Fatalf("ReadJSONL: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("audit events = %+v", events)
+	}
+	if events[0].Decision != "ask" || events[1].Decision != "deny" || events[1].Outcome.Rule != "ApprovalDenied" {
+		t.Fatalf("approval audit events = %+v", events)
+	}
+	if events[1].Outcome.Fields["approval_event_id"] != "evt_ci" {
+		t.Fatalf("approval event link = %+v", events[1].Outcome.Fields)
+	}
+	requester, ok := events[1].Outcome.Fields["requester"].(map[string]any)
+	if !ok || requester["session"] != "agent-42" || requester["agent_name"] != "claude" {
+		t.Fatalf("requester identity = %#v", events[1].Outcome.Fields["requester"])
+	}
+	if events[1].ChainPrev == "" || events[1].ChainHash == "" {
+		t.Fatalf("approval denial audit was not hash chained: %+v", events[1])
 	}
 }
 

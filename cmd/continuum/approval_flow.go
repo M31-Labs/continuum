@@ -13,6 +13,7 @@ import (
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/event"
+	"m31labs.dev/continuum/subject"
 )
 
 type approvalMode string
@@ -23,14 +24,15 @@ const (
 	approvalCLI   approvalMode = "cli"
 )
 
-func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, record audit.Event, evt event.Event, grantStorePath string, maxGrantTTL time.Duration) error {
+func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, sink audit.Sink, record audit.Event, evt event.Event, grantStorePath string, maxGrantTTL time.Duration) error {
 	if record.Outcome.Name != arbiterx.OutcomeAskHuman {
 		return nil
 	}
 	req := approval.Request{
-		Session:  evt.Subject.Session,
-		Question: stringFromOutcome(record.Outcome, "question"),
-		Risk:     stringFromOutcome(record.Outcome, "risk"),
+		Session:   evt.Subject.Session,
+		Requester: subject.IdentityFromSubject(evt.Subject),
+		Question:  stringFromOutcome(record.Outcome, "question"),
+		Risk:      stringFromOutcome(record.Outcome, "risk"),
 	}
 	var resp approval.Response
 	var err error
@@ -46,11 +48,17 @@ func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, re
 		return err
 	}
 	if !resp.Approved {
-		fmt.Fprintf(stdout, "approval=denied session=%s reason=%q\n", req.Session, resp.Reason)
+		denial := approvalDenialAuditEvent(record, evt, req, resp, time.Now().UTC())
+		if sink != nil {
+			if err := sink.Write(ctx, denial); err != nil {
+				return err
+			}
+		}
+		fmt.Fprintf(stdout, "approval=denied session=%s requester=%s reason=%q audit=%s\n", req.Session, requesterLabel(req), denial.Reason, denial.ID)
 		return nil
 	}
 	reason := approvalReason(resp.Reason, record.Outcome, req)
-	grant := approvalGrant(evt, record.Outcome, reason, time.Now().UTC(), maxGrantTTL)
+	grant := approvalGrant(evt, record.Outcome, req.Requester, reason, time.Now().UTC(), maxGrantTTL)
 	if err := capability.UpdateGrantStore(grantStorePath, func(store *capability.GrantStore) error {
 		return store.Add(grant)
 	}); err != nil {
@@ -58,6 +66,56 @@ func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, re
 	}
 	fmt.Fprintf(stdout, "approval=granted grant=%s session=%s capability=%s\n", grant.ID, grant.Session, grant.Capability)
 	return nil
+}
+
+func approvalDenialAuditEvent(record audit.Event, evt event.Event, req approval.Request, resp approval.Response, now time.Time) audit.Event {
+	reason := strings.TrimSpace(resp.Reason)
+	if reason == "" {
+		reason = "approval denied"
+		if req.Question != "" {
+			reason += ": " + req.Question
+		}
+	}
+	fields := map[string]any{
+		"reason":            reason,
+		"approval_event_id": record.ID,
+		"question":          req.Question,
+		"risk":              req.Risk,
+	}
+	if req.Requester != nil {
+		fields["requester"] = req.Requester
+	}
+	return audit.Event{
+		ID:          approvalDenialAuditID(record.ID, now),
+		Time:        now,
+		Clock:       &audit.ClockMetadata{Source: audit.ClockSourceApprovalFlow, RecordedAt: now, EventTimeSource: audit.EventTimeSourceRecordedClock},
+		Subject:     evt.Subject,
+		InputEvent:  evt,
+		Policy:      record.Policy,
+		Outcome:     arbiterx.NewOutcome(arbiterx.OutcomeDeny, "ApprovalDenied", fields),
+		Decision:    "deny",
+		Reason:      reason,
+		Arbitraces:  record.Arbitraces,
+		Capability:  record.Capability,
+		Enforcement: record.Enforcement,
+	}
+}
+
+func approvalDenialAuditID(parentID string, now time.Time) string {
+	if parentID != "" {
+		return parentID + "_approval_denied"
+	}
+	return fmt.Sprintf("approval_denied_%d", now.UnixNano())
+}
+
+func requesterLabel(req approval.Request) string {
+	if req.Requester != nil && req.Requester.Subject != "" {
+		return req.Requester.Subject
+	}
+	if req.Session != "" {
+		return "session:" + req.Session
+	}
+	return "unknown"
 }
 
 func approvalReason(responseReason string, outcome arbiterx.Outcome, req approval.Request) string {
@@ -73,7 +131,7 @@ func approvalReason(responseReason string, outcome arbiterx.Outcome, req approva
 	return "approved governed request"
 }
 
-func approvalGrant(evt event.Event, outcome arbiterx.Outcome, reason string, now time.Time, maxGrantTTL time.Duration) capability.Grant {
+func approvalGrant(evt event.Event, outcome arbiterx.Outcome, requester *subject.Identity, reason string, now time.Time, maxGrantTTL time.Duration) capability.Grant {
 	if reason == "" {
 		reason = outcome.Reason()
 	}
@@ -86,6 +144,7 @@ func approvalGrant(evt event.Event, outcome arbiterx.Outcome, reason string, now
 		Session:    evt.Subject.Session,
 		Capability: approvalCapability(evt),
 		Scope:      approvalScope(evt),
+		Requester:  requester,
 		Reason:     reason,
 		CreatedAt:  now,
 		ExpiresAt:  now.Add(ttl),

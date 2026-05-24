@@ -19,6 +19,7 @@ func (NopSink) Write(context.Context, Event) error { return nil }
 
 const (
 	ClockSourceRuntimeEngine     = "runtime.engine.now"
+	ClockSourceApprovalFlow      = "approval.flow.now"
 	EventTimeSourceInputEvent    = "input_event"
 	EventTimeSourceRecordedClock = "recorded_clock"
 )
