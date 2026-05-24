@@ -15,6 +15,7 @@ import (
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/event"
+	"m31labs.dev/continuum/policy"
 	cruntime "m31labs.dev/continuum/runtime"
 	"m31labs.dev/continuum/subject"
 )
@@ -1372,6 +1373,168 @@ func TestStateCompactionCommands(t *testing.T) {
 	if len(reloadedDeliveries.List()) != 2 || len(reloadedDeliveries.ByStatus(cruntime.DeliveryPending)) != 1 {
 		t.Fatalf("compacted deliveries = %+v", reloadedDeliveries.List())
 	}
+}
+
+func TestStateExportBackupImportCommands(t *testing.T) {
+	dir := t.TempDir()
+	src := commandStatePaths(filepath.Join(dir, "src"))
+	dst := commandStatePaths(filepath.Join(dir, "dst"))
+	archivePath := filepath.Join(dir, "continuum-state.json")
+	backupPath := filepath.Join(dir, "backup", "continuum-state.json")
+	policyPath := filepath.Join("..", "..", "examples", "agent-workdir", "policies", "main.arb")
+	var out, errOut bytes.Buffer
+
+	if err := run([]string{"policy", "publish", "--store", src.policyStore, policyPath}, &out, &errOut); err != nil {
+		t.Fatalf("policy publish: %v\nstderr=%s", err, errOut.String())
+	}
+	out.Reset()
+	if err := run([]string{"policy", "activate", "--store", src.policyStore, "agent-workdir"}, &out, &errOut); err != nil {
+		t.Fatalf("policy activate: %v\nstderr=%s", err, errOut.String())
+	}
+	out.Reset()
+	if err := run([]string{"grant", "--store", src.grantStore, "--session", "agent-42", "--capability", "network.connect", "--host", "github.com", "--reason", "fetch dependency"}, &out, &errOut); err != nil {
+		t.Fatalf("grant: %v\nstderr=%s", err, errOut.String())
+	}
+	grantID := fieldValue(out.String(), "id")
+	if grantID == "" {
+		t.Fatalf("grant output missing id: %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"grant", "revoke", "--store", src.grantStore, "--delivery-store", src.deliveryStore, grantID}, &out, &errOut); err != nil {
+		t.Fatalf("grant revoke: %v\nstderr=%s", err, errOut.String())
+	}
+	sessions := &cruntime.SessionStore{Sessions: []cruntime.Session{{
+		ID:        "agent-42",
+		Subject:   subject.NewAgent("claude", "agent-42", "/repo", "", 4321),
+		State:     cruntime.SessionRunning,
+		StartedAt: time.Date(2026, 5, 24, 3, 0, 0, 0, time.UTC),
+	}}}
+	if err := sessions.Save(src.sessionStore); err != nil {
+		t.Fatalf("sessions Save: %v", err)
+	}
+	out.Reset()
+	if err := run([]string{"airlock", "enter", "--store", src.airlockStore, "--pid", "4321", "--reason", "worm-like fanout"}, &out, &errOut); err != nil {
+		t.Fatalf("airlock enter: %v\nstderr=%s", err, errOut.String())
+	}
+	sink, err := audit.NewJSONLSink(src.audit)
+	if err != nil {
+		t.Fatalf("NewJSONLSink: %v", err)
+	}
+	if err := sink.Write(context.Background(), audit.Event{ID: "evt_state_export", Time: time.Date(2026, 5, 24, 3, 0, 0, 0, time.UTC), Decision: "allow", Reason: "fixture"}); err != nil {
+		t.Fatalf("audit write: %v", err)
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("audit close: %v", err)
+	}
+
+	out.Reset()
+	if err := run(append([]string{"state", "export", "--out", archivePath}, src.args()...), &out, &errOut); err != nil {
+		t.Fatalf("state export: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "exported state items=6") {
+		t.Fatalf("state export output = %q", out.String())
+	}
+	out.Reset()
+	if err := run(append([]string{"state", "backup", "--out", backupPath}, src.args()...), &out, &errOut); err != nil {
+		t.Fatalf("state backup: %v\nstderr=%s", err, errOut.String())
+	}
+	if _, err := os.Stat(backupPath); err != nil {
+		t.Fatalf("backup archive missing: %v", err)
+	}
+
+	out.Reset()
+	if err := run(append([]string{"state", "import", "--in", archivePath, "--dry-run"}, dst.args()...), &out, &errOut); err != nil {
+		t.Fatalf("state import dry-run: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "would_import=6") {
+		t.Fatalf("state import dry-run output = %q", out.String())
+	}
+	out.Reset()
+	if err := run(append([]string{"state", "import", "--in", archivePath}, dst.args()...), &out, &errOut); err != nil {
+		t.Fatalf("state import: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "imported state items=6") {
+		t.Fatalf("state import output = %q", out.String())
+	}
+	reloadedPolicy, err := policy.LoadStore(dst.policyStore)
+	if err != nil {
+		t.Fatalf("policy LoadStore: %v", err)
+	}
+	if reloadedPolicy.Active != "agent-workdir" {
+		t.Fatalf("imported policy active = %q", reloadedPolicy.Active)
+	}
+	reloadedGrants, err := capability.LoadGrantStore(dst.grantStore)
+	if err != nil {
+		t.Fatalf("LoadGrantStore: %v", err)
+	}
+	if len(reloadedGrants.Grants) != 1 || reloadedGrants.Grants[0].ID != grantID {
+		t.Fatalf("imported grants = %+v", reloadedGrants.Grants)
+	}
+	reloadedEvents, err := audit.ReadJSONL(dst.audit)
+	if err != nil {
+		t.Fatalf("ReadJSONL imported audit: %v", err)
+	}
+	if len(reloadedEvents) != 1 || reloadedEvents[0].ID != "evt_state_export" {
+		t.Fatalf("imported audit events = %+v", reloadedEvents)
+	}
+
+	out.Reset()
+	err = run(append([]string{"state", "import", "--in", archivePath}, dst.args()...), &out, &errOut)
+	if err == nil || !strings.Contains(err.Error(), "use --force") {
+		t.Fatalf("state import without force error = %v", err)
+	}
+	out.Reset()
+	if err := run(append([]string{"state", "import", "--in", archivePath, "--force"}, dst.args()...), &out, &errOut); err != nil {
+		t.Fatalf("state import force: %v\nstderr=%s", err, errOut.String())
+	}
+	matches, err := filepath.Glob(dst.grantStore + ".preimport.*")
+	if err != nil {
+		t.Fatalf("Glob backups: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatalf("forced import did not preserve pre-import backup")
+	}
+}
+
+type commandStatePathSet struct {
+	policyStore   string
+	grantStore    string
+	deliveryStore string
+	sessionStore  string
+	airlockStore  string
+	audit         string
+}
+
+func commandStatePaths(dir string) commandStatePathSet {
+	return commandStatePathSet{
+		policyStore:   filepath.Join(dir, "policies.json"),
+		grantStore:    filepath.Join(dir, "grants.json"),
+		deliveryStore: filepath.Join(dir, "deliveries.json"),
+		sessionStore:  filepath.Join(dir, "sessions.json"),
+		airlockStore:  filepath.Join(dir, "airlock.json"),
+		audit:         filepath.Join(dir, "audit.jsonl"),
+	}
+}
+
+func (p commandStatePathSet) args() []string {
+	return []string{
+		"--policy-store", p.policyStore,
+		"--grant-store", p.grantStore,
+		"--delivery-store", p.deliveryStore,
+		"--session-store", p.sessionStore,
+		"--airlock-store", p.airlockStore,
+		"--audit", p.audit,
+	}
+}
+
+func fieldValue(text, name string) string {
+	prefix := name + "="
+	for _, field := range strings.Fields(text) {
+		if strings.HasPrefix(field, prefix) {
+			return strings.TrimPrefix(field, prefix)
+		}
+	}
+	return ""
 }
 
 func TestAuditListFilters(t *testing.T) {

@@ -22,7 +22,7 @@ enforcement backends exist and are reviewed.
 - [x] Add corrupt-store recovery diagnostics that preserve the bad file.
 - [x] Add bounded retention/compaction for delivery, session, and audit state.
 - [x] Add state schema versions and migration hooks.
-- [ ] Add explicit state backup/export/import commands.
+- [x] Add explicit state backup/export/import commands.
 - [ ] Add monotonic ID generation that survives process restarts.
 
 ## Daemon Safety
