@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"m31labs.dev/continuum/airlock"
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
@@ -30,6 +31,9 @@ type Engine struct {
 func NewEngine(bundle *arbiterx.Bundle, sink audit.Sink) *Engine {
 	reg := capability.NewRegistry()
 	for _, cap := range capability.BuiltIns() {
+		_ = reg.Register(cap)
+	}
+	for _, cap := range airlock.DecoyCapabilities() {
 		_ = reg.Register(cap)
 	}
 	return &Engine{

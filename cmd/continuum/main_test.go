@@ -418,6 +418,9 @@ func TestCapabilitiesCommandJSON(t *testing.T) {
 	if !strings.Contains(out.String(), `"name": "noop.enforcement"`) {
 		t.Fatalf("json output = %q", out.String())
 	}
+	if !strings.Contains(out.String(), `"name": "continuum.airlock.decoy.filesystem"`) || !strings.Contains(out.String(), `"real_enforcement": false`) {
+		t.Fatalf("decoy capability missing from json output = %q", out.String())
+	}
 }
 
 func TestCapabilitiesCommandWarnsForDangerousCapabilities(t *testing.T) {

@@ -175,6 +175,13 @@ func TestDaemonStartRegistersBuiltInCapabilities(t *testing.T) {
 	if _, ok := daemon.Registry.Get("observe.audit"); !ok {
 		t.Fatal("observe.audit not registered")
 	}
+	decoy, ok := daemon.Registry.Get("continuum.airlock.decoy.filesystem")
+	if !ok {
+		t.Fatal("airlock decoy capability not registered")
+	}
+	if decoy.Danger != capability.DangerObserve || decoy.Backend != "observe" {
+		t.Fatalf("decoy capability claims enforcement: %+v", decoy)
+	}
 }
 
 type memorySink struct {

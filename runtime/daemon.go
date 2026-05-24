@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"m31labs.dev/continuum/airlock"
 	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/horizon"
 )
@@ -22,6 +23,14 @@ func (d *Daemon) Start(ctx context.Context) error {
 		return fmt.Errorf("nil daemon")
 	}
 	for _, cap := range capability.BuiltIns() {
+		if _, exists := d.Registry.Get(cap.Name); exists {
+			continue
+		}
+		if err := d.Registry.Register(cap); err != nil {
+			return err
+		}
+	}
+	for _, cap := range airlock.DecoyCapabilities() {
 		if _, exists := d.Registry.Get(cap.Name); exists {
 			continue
 		}
