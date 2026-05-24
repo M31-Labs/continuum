@@ -108,14 +108,15 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	}
 	started := time.Now().UTC()
 	startSession := cruntime.Session{
-		ID:          session,
-		Subject:     subj,
-		Command:     append([]string(nil), rest...),
-		Policy:      resolvedPolicy,
-		AuditPath:   *auditPath,
-		State:       cruntime.SessionRunning,
-		ProcessTree: cruntime.NewProcessLifecycleTree(subj, rest, started),
-		StartedAt:   started,
+		ID:              session,
+		Subject:         subj,
+		Command:         append([]string(nil), rest...),
+		Policy:          resolvedPolicy,
+		AuditPath:       *auditPath,
+		State:           cruntime.SessionRunning,
+		ProcessTree:     cruntime.NewProcessLifecycleTree(subj, rest, started),
+		StartedAt:       started,
+		LastHeartbeatAt: started,
 	}
 	if err := cruntime.UpdateSessionStore(*sessionPath, func(sessions *cruntime.SessionStore) error {
 		sessions.Upsert(startSession)

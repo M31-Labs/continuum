@@ -20,6 +20,9 @@ func TestSessionStorePersistsAndFinishes(t *testing.T) {
 		State:     SessionRunning,
 		StartedAt: now,
 	})
+	if store.Sessions[0].LastHeartbeatAt.IsZero() {
+		t.Fatalf("upsert did not seed heartbeat: %+v", store.Sessions[0])
+	}
 	if len(store.Running()) != 1 {
 		t.Fatalf("running = %+v", store.Running())
 	}
@@ -39,9 +42,35 @@ func TestSessionStorePersistsAndFinishes(t *testing.T) {
 	if len(reloaded.Sessions) != 1 || reloaded.Sessions[0].State != SessionExited {
 		t.Fatalf("reloaded = %+v", reloaded.Sessions)
 	}
+	if !reloaded.Sessions[0].LastHeartbeatAt.Equal(now.Add(time.Second)) {
+		t.Fatalf("finish heartbeat = %s", reloaded.Sessions[0].LastHeartbeatAt)
+	}
 	tree := reloaded.Sessions[0].ProcessTree
 	if tree == nil || len(tree.Processes) != 1 || tree.Processes[0].State != ProcessExited {
 		t.Fatalf("process tree = %+v", tree)
+	}
+}
+
+func TestSessionStoreHeartbeatAndMarkStale(t *testing.T) {
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	store := &SessionStore{}
+	store.Upsert(Session{
+		ID:              "agent-session-1",
+		Subject:         subject.NewAgent("claude", "agent-session-1", "/repo", "", 123),
+		State:           SessionRunning,
+		StartedAt:       now.Add(-time.Hour),
+		LastHeartbeatAt: now.Add(-time.Hour),
+	})
+	stale := store.MarkStale(now, 10*time.Minute)
+	if len(stale) != 1 || stale[0].State != SessionStale || len(store.Stale()) != 1 || len(store.Running()) != 0 {
+		t.Fatalf("stale=%+v store=%+v", stale, store.Sessions)
+	}
+	session, err := store.Heartbeat("agent-session-1", now.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("Heartbeat: %v", err)
+	}
+	if session.State != SessionRunning || !session.LastHeartbeatAt.Equal(now.Add(time.Minute)) || len(store.Running()) != 1 {
+		t.Fatalf("heartbeat session=%+v store=%+v", session, store.Sessions)
 	}
 }
 

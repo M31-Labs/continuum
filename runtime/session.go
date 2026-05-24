@@ -17,19 +17,21 @@ const (
 	SessionRunning SessionState = "running"
 	SessionExited  SessionState = "exited"
 	SessionFailed  SessionState = "failed"
+	SessionStale   SessionState = "stale"
 )
 
 type Session struct {
-	ID          string          `json:"id"`
-	Subject     subject.Subject `json:"subject"`
-	Command     []string        `json:"command,omitempty"`
-	Policy      string          `json:"policy,omitempty"`
-	AuditPath   string          `json:"audit_path,omitempty"`
-	State       SessionState    `json:"state"`
-	ExitCode    int             `json:"exit_code,omitempty"`
-	ProcessTree *ProcessTree    `json:"process_tree,omitempty"`
-	StartedAt   time.Time       `json:"started_at"`
-	EndedAt     time.Time       `json:"ended_at,omitempty"`
+	ID              string          `json:"id"`
+	Subject         subject.Subject `json:"subject"`
+	Command         []string        `json:"command,omitempty"`
+	Policy          string          `json:"policy,omitempty"`
+	AuditPath       string          `json:"audit_path,omitempty"`
+	State           SessionState    `json:"state"`
+	ExitCode        int             `json:"exit_code,omitempty"`
+	ProcessTree     *ProcessTree    `json:"process_tree,omitempty"`
+	StartedAt       time.Time       `json:"started_at"`
+	LastHeartbeatAt time.Time       `json:"last_heartbeat_at,omitempty"`
+	EndedAt         time.Time       `json:"ended_at,omitempty"`
 }
 
 type SessionStore struct {
@@ -68,6 +70,9 @@ func UpdateSessionStore(path string, mutate func(*SessionStore) error) error {
 }
 
 func (s *SessionStore) Upsert(session Session) {
+	if session.State == SessionRunning && session.LastHeartbeatAt.IsZero() && !session.StartedAt.IsZero() {
+		session.LastHeartbeatAt = session.StartedAt
+	}
 	for i := range s.Sessions {
 		if s.Sessions[i].ID == session.ID {
 			s.Sessions[i] = session
@@ -88,6 +93,7 @@ func (s *SessionStore) Finish(id string, state SessionState, exitCode int, ended
 		session.State = state
 		session.ExitCode = exitCode
 		session.EndedAt = endedAt
+		session.LastHeartbeatAt = endedAt
 		processState := ProcessExited
 		if state == SessionFailed {
 			processState = ProcessFailed
@@ -118,10 +124,11 @@ func (s *SessionStore) TrackProcessEvent(evt event.Event, now time.Time) (Sessio
 	if index == -1 {
 		started := processEventTime(evt, now)
 		s.Sessions = append(s.Sessions, Session{
-			ID:        sessionID,
-			Subject:   evt.Subject,
-			State:     SessionRunning,
-			StartedAt: started,
+			ID:              sessionID,
+			Subject:         evt.Subject,
+			State:           SessionRunning,
+			StartedAt:       started,
+			LastHeartbeatAt: started,
 		})
 		index = len(s.Sessions) - 1
 	}
@@ -131,6 +138,10 @@ func (s *SessionStore) TrackProcessEvent(evt event.Event, now time.Time) (Sessio
 	}
 	if session.StartedAt.IsZero() {
 		session.StartedAt = processEventTime(evt, now)
+	}
+	session.LastHeartbeatAt = processEventTime(evt, now)
+	if session.State == SessionStale {
+		session.State = SessionRunning
 	}
 	changed := session.ensureProcessTree(now).ObserveEvent(evt, now)
 	if changed {
@@ -165,6 +176,74 @@ func (s *SessionStore) Running() []Session {
 		}
 	}
 	return out
+}
+
+func (s *SessionStore) Stale() []Session {
+	var out []Session
+	for _, session := range s.Sessions {
+		if session.State == SessionStale {
+			out = append(out, session)
+		}
+	}
+	return out
+}
+
+func (s *SessionStore) Heartbeat(id string, now time.Time) (Session, error) {
+	if s == nil {
+		return Session{}, fmt.Errorf("nil session store")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	for i := range s.Sessions {
+		if s.Sessions[i].ID != id {
+			continue
+		}
+		session := &s.Sessions[i]
+		if session.State == SessionExited || session.State == SessionFailed {
+			return Session{}, fmt.Errorf("session %q is %s", id, session.State)
+		}
+		if session.StartedAt.IsZero() {
+			session.StartedAt = now
+		}
+		session.LastHeartbeatAt = now
+		session.State = SessionRunning
+		s.sort()
+		return *session, nil
+	}
+	return Session{}, fmt.Errorf("session %q not found", id)
+}
+
+func (s *SessionStore) MarkStale(now time.Time, maxAge time.Duration) []Session {
+	if s == nil || maxAge <= 0 {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	var stale []Session
+	for i := range s.Sessions {
+		session := &s.Sessions[i]
+		if session.State != SessionRunning {
+			continue
+		}
+		last := session.LastHeartbeatAt
+		if last.IsZero() {
+			last = session.StartedAt
+		}
+		if last.IsZero() || last.After(now) {
+			continue
+		}
+		if now.Sub(last) <= maxAge {
+			continue
+		}
+		session.State = SessionStale
+		stale = append(stale, *session)
+	}
+	if len(stale) > 0 {
+		s.sort()
+	}
+	return stale
 }
 
 func (s *SessionStore) sort() {

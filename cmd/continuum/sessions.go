@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	cruntime "m31labs.dev/continuum/runtime"
 )
 
 func runSessions(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return usageError("Usage: continuum sessions list|show [--store .continuum/sessions.json]")
+		return usageError("Usage: continuum sessions list|show|heartbeat|mark-stale [--store .continuum/sessions.json]")
 	}
 	switch args[0] {
 	case "list":
@@ -41,7 +42,7 @@ func runSessions(args []string, stdout, stderr io.Writer) error {
 			return enc.Encode(sessions)
 		}
 		for _, session := range sessions {
-			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\n", session.ID, session.State, session.Subject.String(), strings.Join(session.Command, " "), session.StartedAt.Format(timeFormat))
+			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n", session.ID, session.State, session.Subject.String(), strings.Join(session.Command, " "), formatSessionTime(session.StartedAt), formatSessionTime(session.LastHeartbeatAt))
 		}
 		return nil
 	case "show":
@@ -75,11 +76,76 @@ func runSessions(args []string, stdout, stderr io.Writer) error {
 			return enc.Encode(session)
 		}
 		processes, running := sessionProcessCounts(session)
-		fmt.Fprintf(stdout, "id=%s state=%s subject=%s command=%q policy=%s audit=%s processes=%d running_processes=%d\n",
-			session.ID, session.State, session.Subject.String(), strings.Join(session.Command, " "), session.Policy, session.AuditPath, processes, running)
+		fmt.Fprintf(stdout, "id=%s state=%s subject=%s command=%q policy=%s audit=%s started=%s last_heartbeat=%s processes=%d running_processes=%d\n",
+			session.ID, session.State, session.Subject.String(), strings.Join(session.Command, " "), session.Policy, session.AuditPath, formatSessionTime(session.StartedAt), formatSessionTime(session.LastHeartbeatAt), processes, running)
+		return nil
+	case "heartbeat":
+		fs := flag.NewFlagSet("sessions heartbeat", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultSessionStorePath, "session store")
+		jsonOut := fs.Bool("json", false, "emit JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 1 {
+			return usageError("Usage: continuum sessions heartbeat [--store .continuum/sessions.json] <session-id>")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolveSessionStorePath(*storePath, cfg)
+		now := time.Now().UTC()
+		var session cruntime.Session
+		if err := cruntime.UpdateSessionStore(*storePath, func(sessions *cruntime.SessionStore) error {
+			var err error
+			session, err = sessions.Heartbeat(fs.Arg(0), now)
+			return err
+		}); err != nil {
+			return err
+		}
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(session)
+		}
+		fmt.Fprintf(stdout, "heartbeat session=%s state=%s last_heartbeat=%s\n", session.ID, session.State, formatSessionTime(session.LastHeartbeatAt))
+		return nil
+	case "mark-stale":
+		fs := flag.NewFlagSet("sessions mark-stale", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultSessionStorePath, "session store")
+		after := fs.Duration("after", 0, "mark running sessions stale after this heartbeat age")
+		jsonOut := fs.Bool("json", false, "emit JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 || *after <= 0 {
+			return usageError("Usage: continuum sessions mark-stale --after 10m [--store .continuum/sessions.json]")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolveSessionStorePath(*storePath, cfg)
+		var stale []cruntime.Session
+		if err := cruntime.UpdateSessionStore(*storePath, func(sessions *cruntime.SessionStore) error {
+			stale = sessions.MarkStale(time.Now().UTC(), *after)
+			return nil
+		}); err != nil {
+			return err
+		}
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(stale)
+		}
+		fmt.Fprintf(stdout, "stale_sessions=%d after=%s\n", len(stale), after.String())
 		return nil
 	default:
-		return usageError("Usage: continuum sessions list|show [--store .continuum/sessions.json]")
+		return usageError("Usage: continuum sessions list|show|heartbeat|mark-stale [--store .continuum/sessions.json]")
 	}
 }
 
@@ -112,4 +178,11 @@ func sessionProcessCounts(session cruntime.Session) (int, int) {
 		return 0, 0
 	}
 	return len(session.ProcessTree.Processes), len(session.ProcessTree.Running())
+}
+
+func formatSessionTime(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	return t.Format(timeFormat)
 }

@@ -44,6 +44,8 @@ continuum run --agent claude --repo . -- claude code
 continuum ingest --events testdata/events/file_secret_access.json --approval deny
 continuum sessions list
 continuum sessions show agent-session-42
+continuum sessions heartbeat agent-session-42
+continuum sessions mark-stale --after 10m
 continuum doctor --config continuum.toml
 continuum version
 continuum agent start --config continuum.toml --listen 8787 --auth-token "$CONTINUUM_DAEMON_TOKEN"

@@ -48,7 +48,7 @@ func runStatus(args []string, stdout, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "policy: active=%s bundles=%d\n", snapshot.ActivePolicy, snapshot.PolicyBundles)
 	fmt.Fprintf(stdout, "capabilities: total=%d sources=%d sinks=%d workers=%d privileged=%d\n",
 		snapshot.Health.Capabilities, snapshot.Health.SourceCount, snapshot.Health.SinkCount, snapshot.Health.WorkerCount, snapshot.Health.PrivilegedCount)
-	fmt.Fprintf(stdout, "state: active_grants=%d deliveries=%d pending_deliveries=%d failed_deliveries=%d airlocks=%d running_sessions=%d sessions=%d audit_events=%d\n", snapshot.ActiveGrants, snapshot.Deliveries, snapshot.PendingDeliveries, snapshot.FailedDeliveries, snapshot.AirlockSessions, snapshot.RunningSessions, snapshot.Sessions, snapshot.AuditEvents)
+	fmt.Fprintf(stdout, "state: active_grants=%d deliveries=%d pending_deliveries=%d failed_deliveries=%d airlocks=%d running_sessions=%d stale_sessions=%d sessions=%d audit_events=%d\n", snapshot.ActiveGrants, snapshot.Deliveries, snapshot.PendingDeliveries, snapshot.FailedDeliveries, snapshot.AirlockSessions, snapshot.RunningSessions, snapshot.StaleSessions, snapshot.Sessions, snapshot.AuditEvents)
 	fmt.Fprintf(stdout, "enforcement: file=%s network=%s process=%s\n", snapshot.Enforcement.File, snapshot.Enforcement.Network, snapshot.Enforcement.Process)
 	return nil
 }
@@ -65,6 +65,7 @@ type statusSnapshot struct {
 	AirlockSessions   int                      `json:"airlock_sessions"`
 	Sessions          int                      `json:"sessions"`
 	RunningSessions   int                      `json:"running_sessions"`
+	StaleSessions     int                      `json:"stale_sessions"`
 	AuditEvents       int                      `json:"audit_events"`
 	Health            cruntime.Health          `json:"health"`
 	Enforcement       config.EnforcementConfig `json:"enforcement"`
@@ -131,6 +132,7 @@ func loadStatusSnapshot(configPath, policyStorePath, grantStorePath, deliverySto
 		AirlockSessions:   len(airlocks.List()),
 		Sessions:          len(sessions.Sessions),
 		RunningSessions:   len(sessions.Running()),
+		StaleSessions:     len(sessions.Stale()),
 		AuditEvents:       auditEvents,
 		Health:            daemon.Health(),
 		Enforcement:       cfg.Enforcement,

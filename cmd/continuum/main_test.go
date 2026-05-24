@@ -611,6 +611,49 @@ func TestRunCommandAuditsSyntheticProcess(t *testing.T) {
 	}
 }
 
+func TestSessionsHeartbeatAndMarkStaleCommands(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	now := time.Now().UTC().Add(-time.Hour)
+	store := &cruntime.SessionStore{}
+	store.Upsert(cruntime.Session{
+		ID:              "agent-session-1",
+		State:           cruntime.SessionRunning,
+		StartedAt:       now,
+		LastHeartbeatAt: now,
+	})
+	if err := store.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	var out, errOut bytes.Buffer
+	if err := run([]string{"sessions", "mark-stale", "--store", path, "--after", "10m"}, &out, &errOut); err != nil {
+		t.Fatalf("sessions mark-stale: %v", err)
+	}
+	if !strings.Contains(out.String(), "stale_sessions=1") {
+		t.Fatalf("mark-stale output = %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"sessions", "list", "--store", path, "--state", "stale"}, &out, &errOut); err != nil {
+		t.Fatalf("sessions list stale: %v", err)
+	}
+	if !strings.Contains(out.String(), "agent-session-1") || !strings.Contains(out.String(), "stale") {
+		t.Fatalf("stale list output = %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"sessions", "heartbeat", "--store", path, "agent-session-1"}, &out, &errOut); err != nil {
+		t.Fatalf("sessions heartbeat: %v", err)
+	}
+	if !strings.Contains(out.String(), "state=running") {
+		t.Fatalf("heartbeat output = %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"sessions", "show", "--store", path, "agent-session-1"}, &out, &errOut); err != nil {
+		t.Fatalf("sessions show: %v", err)
+	}
+	if !strings.Contains(out.String(), "last_heartbeat=") || strings.Contains(out.String(), "last_heartbeat=-") {
+		t.Fatalf("sessions show output = %q", out.String())
+	}
+}
+
 func TestGrantCommandPersistsAndLists(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "grants.json")
 	var out, errOut bytes.Buffer

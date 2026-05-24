@@ -100,8 +100,8 @@ enforcement backends exist and are reviewed.
 
 ## Runtime And Sessions
 
-- [ ] Add session heartbeat updates.
-- [ ] Add stale running-session detection.
+- [x] Add session heartbeat updates.
+- [x] Add stale running-session detection.
 - [ ] Add process tree pruning and retention policy.
 - [ ] Add subject identity merge tests for session, cgroup, and repo subjects.
 - [ ] Add `continuum run` environment redaction in audit/session output.
