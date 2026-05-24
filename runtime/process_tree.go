@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -33,6 +34,10 @@ type ProcessRecord struct {
 type ProcessTree struct {
 	RootPID   int             `json:"root_pid,omitempty"`
 	Processes []ProcessRecord `json:"processes,omitempty"`
+}
+
+type ProcessTreeRetentionOptions struct {
+	MaxRecords int
 }
 
 func NewProcessLifecycleTree(subj subject.Subject, command []string, now time.Time) *ProcessTree {
@@ -106,6 +111,58 @@ func (t *ProcessTree) Running() []ProcessRecord {
 		}
 	}
 	return out
+}
+
+func (t *ProcessTree) Prune(opts ProcessTreeRetentionOptions) (RetentionReport, error) {
+	if opts.MaxRecords < 0 {
+		return RetentionReport{}, fmt.Errorf("max process records must be >= 0")
+	}
+	if t == nil || opts.MaxRecords == 0 {
+		return RetentionReport{}, nil
+	}
+	report := RetentionReport{Before: len(t.Processes)}
+	if len(t.Processes) <= opts.MaxRecords {
+		report.After = len(t.Processes)
+		return report, nil
+	}
+	candidates := make([]int, 0, len(t.Processes))
+	for i, record := range t.Processes {
+		if record.PID == t.RootPID || !terminalProcessState(record.State) {
+			continue
+		}
+		candidates = append(candidates, i)
+	}
+	slices.SortFunc(candidates, func(a, b int) int {
+		at := processRecordRetentionTime(t.Processes[a])
+		bt := processRecordRetentionTime(t.Processes[b])
+		if at.Equal(bt) {
+			return t.Processes[a].PID - t.Processes[b].PID
+		}
+		if at.Before(bt) {
+			return -1
+		}
+		return 1
+	})
+	remove := map[int]bool{}
+	for _, index := range candidates {
+		if len(t.Processes)-len(remove) <= opts.MaxRecords {
+			break
+		}
+		remove[index] = true
+	}
+	if len(remove) > 0 {
+		kept := t.Processes[:0]
+		for i, record := range t.Processes {
+			if !remove[i] {
+				kept = append(kept, record)
+			}
+		}
+		t.Processes = kept
+		t.sort()
+	}
+	report.After = len(t.Processes)
+	report.Removed = report.Before - report.After
+	return report, nil
 }
 
 func (t *ProcessTree) observeExec(evt event.Event, now time.Time) bool {
@@ -285,4 +342,15 @@ func processIntField(fields map[string]any, key string) int {
 func processBoolField(fields map[string]any, key string) bool {
 	value, _ := fields[key].(bool)
 	return value
+}
+
+func terminalProcessState(state ProcessState) bool {
+	return state == ProcessExited || state == ProcessFailed
+}
+
+func processRecordRetentionTime(record ProcessRecord) time.Time {
+	if !record.EndedAt.IsZero() {
+		return record.EndedAt
+	}
+	return record.StartedAt
 }

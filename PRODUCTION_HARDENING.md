@@ -102,7 +102,7 @@ enforcement backends exist and are reviewed.
 
 - [x] Add session heartbeat updates.
 - [x] Add stale running-session detection.
-- [ ] Add process tree pruning and retention policy.
+- [x] Add process tree pruning and retention policy.
 - [x] Add subject identity merge tests for session, cgroup, and repo subjects.
 - [ ] Add `continuum run` environment redaction in audit/session output.
 - [x] Add child-process synthetic fixture coverage.

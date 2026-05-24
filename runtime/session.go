@@ -272,7 +272,7 @@ func (s *SessionStore) Compact(opts RetentionOptions) (RetentionReport, error) {
 	}
 	now := retentionNow(opts)
 	cutoff := now.Add(-opts.OlderThan)
-	report := RetentionReport{Before: len(s.Sessions)}
+	report := RetentionReport{Before: len(s.Sessions), ProcessesBefore: countSessionProcessRecords(s.Sessions)}
 	retained := retainedTerminalSessionIndexes(s.Sessions, opts.Retain)
 	kept := s.Sessions[:0]
 	for i, session := range s.Sessions {
@@ -281,9 +281,21 @@ func (s *SessionStore) Compact(opts RetentionOptions) (RetentionReport, error) {
 		}
 	}
 	s.Sessions = kept
+	if opts.MaxProcessRecords > 0 {
+		for i := range s.Sessions {
+			if s.Sessions[i].ProcessTree == nil {
+				continue
+			}
+			if _, err := s.Sessions[i].ProcessTree.Prune(ProcessTreeRetentionOptions{MaxRecords: opts.MaxProcessRecords}); err != nil {
+				return RetentionReport{}, err
+			}
+		}
+	}
 	s.sort()
 	report.After = len(s.Sessions)
 	report.Removed = report.Before - report.After
+	report.ProcessesAfter = countSessionProcessRecords(s.Sessions)
+	report.ProcessesRemoved = report.ProcessesBefore - report.ProcessesAfter
 	return report, nil
 }
 
@@ -356,6 +368,16 @@ func sessionRetentionTime(session Session) time.Time {
 		return session.LastHeartbeatAt
 	}
 	return session.StartedAt
+}
+
+func countSessionProcessRecords(sessions []Session) int {
+	total := 0
+	for _, session := range sessions {
+		if session.ProcessTree != nil {
+			total += len(session.ProcessTree.Processes)
+		}
+	}
+	return total
 }
 
 func (s *SessionStore) findIndex(id string) int {

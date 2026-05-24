@@ -151,19 +151,20 @@ func runSessions(args []string, stdout, stderr io.Writer) error {
 		storePath := fs.String("store", defaultSessionStorePath, "session store")
 		retain := fs.Int("retain", 0, "retain newest terminal sessions")
 		olderThan := fs.Duration("older-than", 0, "remove terminal sessions older than this age")
+		maxProcesses := fs.Int("max-processes", 0, "cap process records retained per session")
 		jsonOut := fs.Bool("json", false, "emit JSON")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 0 {
-			return usageError("Usage: continuum sessions compact [--store .continuum/sessions.json] --retain N [--older-than 720h]")
+			return usageError("Usage: continuum sessions compact [--store .continuum/sessions.json] [--retain N] [--older-than 720h] [--max-processes N]")
 		}
 		cfg, err := loadConfigOrDefault(*configPath)
 		if err != nil {
 			return err
 		}
 		*storePath = resolveSessionStorePath(*storePath, cfg)
-		opts := cruntime.RetentionOptions{Retain: *retain, OlderThan: *olderThan, Now: time.Now().UTC()}
+		opts := cruntime.RetentionOptions{Retain: *retain, OlderThan: *olderThan, MaxProcessRecords: *maxProcesses, Now: time.Now().UTC()}
 		var report cruntime.RetentionReport
 		if err := cruntime.UpdateSessionStore(*storePath, func(sessions *cruntime.SessionStore) error {
 			var err error
@@ -177,7 +178,8 @@ func runSessions(args []string, stdout, stderr io.Writer) error {
 			enc.SetIndent("", "  ")
 			return enc.Encode(report)
 		}
-		fmt.Fprintf(stdout, "compacted sessions before=%d after=%d removed=%d store=%s\n", report.Before, report.After, report.Removed, *storePath)
+		fmt.Fprintf(stdout, "compacted sessions before=%d after=%d removed=%d process_records_before=%d process_records_after=%d process_records_removed=%d store=%s\n",
+			report.Before, report.After, report.Removed, report.ProcessesBefore, report.ProcessesAfter, report.ProcessesRemoved, *storePath)
 		return nil
 	default:
 		return usageError("Usage: continuum sessions list|show|heartbeat|mark-stale|compact [--store .continuum/sessions.json]")

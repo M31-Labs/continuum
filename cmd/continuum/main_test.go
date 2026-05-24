@@ -1333,14 +1333,27 @@ func TestStateCompactionCommands(t *testing.T) {
 	sessions := &cruntime.SessionStore{Sessions: []cruntime.Session{
 		{ID: "old", State: cruntime.SessionExited, StartedAt: now.Add(-3 * time.Hour), EndedAt: now.Add(-3 * time.Hour)},
 		{ID: "new", State: cruntime.SessionExited, StartedAt: now.Add(-time.Hour), EndedAt: now.Add(-time.Hour)},
-		{ID: "running", State: cruntime.SessionRunning, StartedAt: now.Add(-4 * time.Hour), LastHeartbeatAt: now.Add(-4 * time.Hour)},
+		{
+			ID:    "running",
+			State: cruntime.SessionRunning,
+			ProcessTree: &cruntime.ProcessTree{RootPID: 10, Processes: []cruntime.ProcessRecord{
+				{PID: 10, State: cruntime.ProcessRunning, StartedAt: now.Add(-4 * time.Hour)},
+				{PID: 11, ParentPID: 10, State: cruntime.ProcessExited, StartedAt: now.Add(-3 * time.Hour), EndedAt: now.Add(-3 * time.Hour)},
+				{PID: 12, ParentPID: 10, State: cruntime.ProcessExited, StartedAt: now.Add(-time.Hour), EndedAt: now.Add(-time.Hour)},
+			}},
+			StartedAt:       now.Add(-4 * time.Hour),
+			LastHeartbeatAt: now.Add(-4 * time.Hour),
+		},
 	}}
 	if err := sessions.Save(sessionPath); err != nil {
 		t.Fatalf("sessions Save: %v", err)
 	}
 	out.Reset()
-	if err := run([]string{"sessions", "compact", "--store", sessionPath, "--retain", "1"}, &out, &errOut); err != nil {
+	if err := run([]string{"sessions", "compact", "--store", sessionPath, "--retain", "1", "--max-processes", "2"}, &out, &errOut); err != nil {
 		t.Fatalf("sessions compact: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "process_records_removed=1") {
+		t.Fatalf("sessions compact output = %q", out.String())
 	}
 	reloadedSessions, err := cruntime.LoadSessionStore(sessionPath)
 	if err != nil {
@@ -1348,6 +1361,10 @@ func TestStateCompactionCommands(t *testing.T) {
 	}
 	if len(reloadedSessions.Sessions) != 2 {
 		t.Fatalf("compacted sessions = %+v", reloadedSessions.Sessions)
+	}
+	runningSession, ok := findSession(reloadedSessions.Sessions, "running")
+	if !ok || runningSession.ProcessTree == nil || len(runningSession.ProcessTree.Processes) != 2 {
+		t.Fatalf("compacted running session = %+v", runningSession)
 	}
 
 	deliveryPath := filepath.Join(dir, "deliveries.json")

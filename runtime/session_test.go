@@ -3,6 +3,7 @@ package runtime
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -93,6 +94,39 @@ func TestSessionStoreCompactRetainsRunningAndNewestTerminal(t *testing.T) {
 	}
 	if _, ok := findSessionForTest(store.Sessions, "new"); !ok {
 		t.Fatalf("newest terminal session pruned: %+v", store.Sessions)
+	}
+}
+
+func TestSessionStoreCompactPrunesProcessTrees(t *testing.T) {
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	store := &SessionStore{SchemaVersion: SessionStoreSchemaVersion, Sessions: []Session{
+		{
+			ID:    "running",
+			State: SessionRunning,
+			ProcessTree: &ProcessTree{RootPID: 10, Processes: []ProcessRecord{
+				{PID: 10, State: ProcessRunning, StartedAt: now.Add(-5 * time.Hour)},
+				{PID: 11, ParentPID: 10, State: ProcessExited, StartedAt: now.Add(-4 * time.Hour), EndedAt: now.Add(-4 * time.Hour)},
+				{PID: 12, ParentPID: 10, State: ProcessFailed, StartedAt: now.Add(-3 * time.Hour), EndedAt: now.Add(-3 * time.Hour)},
+				{PID: 13, ParentPID: 10, State: ProcessExited, StartedAt: now.Add(-time.Hour), EndedAt: now.Add(-time.Hour)},
+			}},
+			StartedAt:       now.Add(-5 * time.Hour),
+			LastHeartbeatAt: now,
+		},
+	}}
+	report, err := store.Compact(RetentionOptions{MaxProcessRecords: 3, Now: now})
+	if err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if report.Removed != 0 || report.ProcessesBefore != 4 || report.ProcessesAfter != 3 || report.ProcessesRemoved != 1 {
+		t.Fatalf("report = %+v", report)
+	}
+	if len(store.Sessions) != 1 || store.Sessions[0].ProcessTree == nil {
+		t.Fatalf("sessions = %+v", store.Sessions)
+	}
+	got := processTreePIDsForTest(store.Sessions[0].ProcessTree)
+	want := []int{10, 12, 13}
+	if !slices.Equal(got, want) {
+		t.Fatalf("pids = %+v, want %+v", got, want)
 	}
 }
 

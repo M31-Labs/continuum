@@ -6,15 +6,19 @@ import (
 )
 
 type RetentionOptions struct {
-	Retain    int
-	OlderThan time.Duration
-	Now       time.Time
+	Retain            int
+	OlderThan         time.Duration
+	MaxProcessRecords int
+	Now               time.Time
 }
 
 type RetentionReport struct {
-	Before  int `json:"before"`
-	After   int `json:"after"`
-	Removed int `json:"removed"`
+	Before           int `json:"before"`
+	After            int `json:"after"`
+	Removed          int `json:"removed"`
+	ProcessesBefore  int `json:"processes_before,omitempty"`
+	ProcessesAfter   int `json:"processes_after,omitempty"`
+	ProcessesRemoved int `json:"processes_removed,omitempty"`
 }
 
 func (o RetentionOptions) Validate() error {
@@ -24,8 +28,11 @@ func (o RetentionOptions) Validate() error {
 	if o.OlderThan < 0 {
 		return fmt.Errorf("older-than must be >= 0")
 	}
-	if o.Retain == 0 && o.OlderThan == 0 {
-		return fmt.Errorf("retain or older-than is required")
+	if o.MaxProcessRecords < 0 {
+		return fmt.Errorf("max-processes must be >= 0")
+	}
+	if o.Retain == 0 && o.OlderThan == 0 && o.MaxProcessRecords == 0 {
+		return fmt.Errorf("retain, older-than, or max-processes is required")
 	}
 	return nil
 }
