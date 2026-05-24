@@ -34,8 +34,8 @@ enforcement backends exist and are reviewed.
 - [x] Add HTTP server read, write, idle, and shutdown timeouts.
 - [x] Add graceful shutdown on SIGINT/SIGTERM.
 - [x] Reject unsupported content types on ingest.
-- [ ] Return structured error bodies consistently.
-- [ ] Add per-endpoint method tests.
+- [x] Return structured error bodies consistently.
+- [x] Add per-endpoint method tests.
 - [ ] Add daemon readiness that validates policy, state, and registry.
 - [ ] Add Unix socket serving mode for local-only deployments.
 - [ ] Add config-driven CORS denial/allowlist, default deny.

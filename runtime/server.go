@@ -48,7 +48,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if !requireGET(w, r) {
+		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
 		if !authorizeHTTP(w, r, opts, false) {
@@ -57,7 +57,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		writeJSON(w, daemon.Health())
 	})
 	mux.HandleFunc("/capabilities", func(w http.ResponseWriter, r *http.Request) {
-		if !requireGET(w, r) {
+		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
 		if !authorizeHTTP(w, r, opts, false) {
@@ -70,7 +70,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		writeJSON(w, daemon.Registry.List())
 	})
 	mux.HandleFunc("/sessions", func(w http.ResponseWriter, r *http.Request) {
-		if !requireGET(w, r) {
+		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
 		if !authorizeHTTP(w, r, opts, false) {
@@ -84,7 +84,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		writeJSON(w, store.Sessions)
 	})
 	mux.HandleFunc("/grants", func(w http.ResponseWriter, r *http.Request) {
-		if !requireGET(w, r) {
+		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
 		if !authorizeHTTP(w, r, opts, false) {
@@ -102,7 +102,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		writeJSON(w, store.Active(time.Now().UTC()))
 	})
 	mux.HandleFunc("/airlocks", func(w http.ResponseWriter, r *http.Request) {
-		if !requireGET(w, r) {
+		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
 		if !authorizeHTTP(w, r, opts, false) {
@@ -116,7 +116,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		writeJSON(w, store.List())
 	})
 	mux.HandleFunc("/deliveries", func(w http.ResponseWriter, r *http.Request) {
-		if !requireGET(w, r) {
+		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
 		if !authorizeHTTP(w, r, opts, false) {
@@ -134,7 +134,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		writeJSON(w, items)
 	})
 	mux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
-		if !requireGET(w, r) {
+		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
 		if !authorizeHTTP(w, r, opts, false) {
@@ -155,8 +155,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		writeJSON(w, events)
 	})
 	mux.HandleFunc("/ingest", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		if !requireMethod(w, r, http.MethodPost) {
 			return
 		}
 		if !authorizeHTTP(w, r, opts, true) {
@@ -267,11 +266,11 @@ func (p StatePaths) withDefaults() StatePaths {
 	return p
 }
 
-func requireGET(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method == http.MethodGet {
+func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
+	if r.Method == method {
 		return true
 	}
-	w.WriteHeader(http.StatusMethodNotAllowed)
+	writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	return false
 }
 

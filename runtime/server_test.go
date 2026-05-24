@@ -39,6 +39,37 @@ func TestHTTPHandlerServesHealthAndCapabilities(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlerReturnsStructuredMethodErrors(t *testing.T) {
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandler(daemon)
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodPost, path: "/healthz"},
+		{method: http.MethodPost, path: "/capabilities"},
+		{method: http.MethodPost, path: "/sessions"},
+		{method: http.MethodPost, path: "/grants"},
+		{method: http.MethodPost, path: "/airlocks"},
+		{method: http.MethodPost, path: "/deliveries"},
+		{method: http.MethodPost, path: "/audit"},
+		{method: http.MethodGet, path: "/ingest"},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s %s status = %d body=%s", tc.method, tc.path, res.Code, res.Body.String())
+		}
+		if !strings.Contains(res.Header().Get("content-type"), "application/json") || !strings.Contains(res.Body.String(), `"error"`) {
+			t.Fatalf("%s %s did not return structured error: content-type=%s body=%s", tc.method, tc.path, res.Header().Get("content-type"), res.Body.String())
+		}
+	}
+}
+
 func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
 	dir := t.TempDir()
 	auditPath := filepath.Join(dir, "audit.jsonl")
