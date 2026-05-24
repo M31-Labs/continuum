@@ -26,6 +26,9 @@ func TestLoadExampleConfig(t *testing.T) {
 	if cfg.State.DeliveryStore != ".continuum/deliveries.json" {
 		t.Fatalf("delivery store = %q", cfg.State.DeliveryStore)
 	}
+	if cfg.Grant.MaxTTL != "24h" {
+		t.Fatalf("grant max ttl = %q", cfg.Grant.MaxTTL)
+	}
 }
 
 func TestLoadRejectsUnknownKey(t *testing.T) {
@@ -60,6 +63,23 @@ func TestLoadDaemonConfig(t *testing.T) {
 	}
 	if cfg.Daemon.CORSOrigins != "https://console.example,https://ops.example" {
 		t.Fatalf("daemon config = %+v", cfg.Daemon)
+	}
+}
+
+func TestLoadGrantConfig(t *testing.T) {
+	cfg, err := LoadBytes([]byte("[grant]\nmax_ttl = \"2h\"\n"))
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if cfg.Grant.MaxTTL != "2h" {
+		t.Fatalf("grant config = %+v", cfg.Grant)
+	}
+}
+
+func TestLoadRejectsInvalidGrantTTL(t *testing.T) {
+	_, err := LoadBytes([]byte("[grant]\nmax_ttl = \"0s\"\n"))
+	if err == nil {
+		t.Fatal("expected invalid grant max_ttl error")
 	}
 }
 

@@ -151,6 +151,13 @@ func assign(cfg *Config, section, key, value string) error {
 		default:
 			return unknown(section, key)
 		}
+	case "grant":
+		switch key {
+		case "max_ttl":
+			cfg.Grant.MaxTTL = value
+		default:
+			return unknown(section, key)
+		}
 	case "enforcement":
 		switch key {
 		case "network":

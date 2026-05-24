@@ -78,8 +78,8 @@ enforcement backends exist and are reviewed.
 
 ## Grant And Approval Hardening
 
-- [ ] Require non-empty reasons for grants and approval overrides.
-- [ ] Bound maximum grant TTL in config.
+- [x] Require non-empty reasons for grants and approval overrides.
+- [x] Bound maximum grant TTL in config.
 - [ ] Add grant renewal flow instead of silent long-lived grants.
 - [ ] Persist approval requester identity when available.
 - [ ] Record approval denials as audit events.

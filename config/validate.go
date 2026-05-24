@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 func Validate(cfg Config) error {
 	if cfg.Project.Name == "" {
@@ -20,6 +23,16 @@ func Validate(cfg Config) error {
 	}
 	if cfg.Approval.Kind == "" {
 		return fmt.Errorf("approval.kind is required")
+	}
+	if cfg.Grant.MaxTTL == "" {
+		return fmt.Errorf("grant.max_ttl is required")
+	}
+	maxTTL, err := time.ParseDuration(cfg.Grant.MaxTTL)
+	if err != nil {
+		return fmt.Errorf("grant.max_ttl %q is invalid: %w", cfg.Grant.MaxTTL, err)
+	}
+	if maxTTL <= 0 {
+		return fmt.Errorf("grant.max_ttl must be positive")
 	}
 	switch cfg.Approval.Kind {
 	case "cli", "server", "allow", "deny":

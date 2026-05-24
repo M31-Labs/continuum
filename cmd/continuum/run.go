@@ -53,6 +53,10 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	*sessionPath = resolveSessionStorePath(*sessionPath, cfg)
+	maxGrantTTL, err := configuredMaxGrantTTL(cfg)
+	if err != nil {
+		return err
+	}
 	absRepo, err := filepath.Abs(*repo)
 	if err != nil {
 		return err
@@ -137,7 +141,7 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		printAuditLine(stdout, record)
-		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, record, evt, *grantPath); err != nil {
+		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, record, evt, *grantPath, maxGrantTTL); err != nil {
 			_ = cmd.Process.Kill()
 			_, _ = cmd.Process.Wait()
 			return err

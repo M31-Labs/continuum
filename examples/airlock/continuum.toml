@@ -26,6 +26,9 @@ airlock_store = ".continuum/airlock.json"
 [daemon]
 cors_origins = ""
 
+[grant]
+max_ttl = "24h"
+
 [enforcement]
 network = "observe"
 file = "observe"

@@ -48,6 +48,10 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	*airlockStorePath = resolveAirlockStorePath(*airlockStorePath, cfg)
+	maxGrantTTL, err := configuredMaxGrantTTL(cfg)
+	if err != nil {
+		return err
+	}
 	resolvedPolicy, err := resolvePolicyPath(*policyPath, *policyStorePath, cfg)
 	if err != nil {
 		return err
@@ -118,7 +122,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		printAuditLine(stdout, record)
-		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, record, evt, *grantPath); err != nil {
+		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, record, evt, *grantPath, maxGrantTTL); err != nil {
 			return err
 		}
 	}

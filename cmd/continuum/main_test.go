@@ -12,6 +12,7 @@ import (
 
 	"m31labs.dev/continuum/arbiterx"
 	"m31labs.dev/continuum/audit"
+	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/event"
 	cruntime "m31labs.dev/continuum/runtime"
 	"m31labs.dev/continuum/subject"
@@ -91,7 +92,7 @@ func TestStatusCommandInspectsStores(t *testing.T) {
 		t.Fatalf("policy activate: %v", err)
 	}
 	out.Reset()
-	if err := run([]string{"grant", "--store", grantStore, "--session", "s1", "--capability", "network.connect", "--host", "github.com"}, &out, &errOut); err != nil {
+	if err := run([]string{"grant", "--store", grantStore, "--session", "s1", "--capability", "network.connect", "--host", "github.com", "--reason", "test grant"}, &out, &errOut); err != nil {
 		t.Fatalf("grant: %v", err)
 	}
 	out.Reset()
@@ -295,7 +296,7 @@ kind = "cli"
 		t.Fatalf("policy activate with config: %v", err)
 	}
 	out.Reset()
-	if err := run([]string{"grant", "--config", configPath, "--session", "agent-session-42", "--capability", "network.connect", "--host", "github.com"}, &out, &errOut); err != nil {
+	if err := run([]string{"grant", "--config", configPath, "--session", "agent-session-42", "--capability", "network.connect", "--host", "github.com", "--reason", "test grant"}, &out, &errOut); err != nil {
 		t.Fatalf("grant with config: %v", err)
 	}
 	if _, err := os.Stat(grantStore); err != nil {
@@ -447,6 +448,49 @@ func TestGrantCommandPersistsAndLists(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "network.connect") {
 		t.Fatalf("grant list output = %q", out.String())
+	}
+}
+
+func TestGrantCommandRequiresReason(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "grants.json")
+	var out, errOut bytes.Buffer
+	err := run([]string{
+		"grant",
+		"--store", store,
+		"--session", "agent-session-42",
+		"--capability", "network.connect",
+		"--host", "github.com",
+	}, &out, &errOut)
+	if err == nil {
+		t.Fatal("grant succeeded without reason")
+	}
+	if !strings.Contains(err.Error(), "--reason") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestGrantCommandRejectsTTLAboveConfiguredMax(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "continuum.toml")
+	if err := os.WriteFile(configPath, []byte("[grant]\nmax_ttl = \"1m\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	err := run([]string{
+		"grant",
+		"--config", configPath,
+		"--store", filepath.Join(dir, "grants.json"),
+		"--session", "agent-session-42",
+		"--capability", "network.connect",
+		"--host", "github.com",
+		"--ttl", "2m",
+		"--reason", "fetch dependency",
+	}, &out, &errOut)
+	if err == nil {
+		t.Fatal("grant succeeded with TTL above configured maximum")
+	}
+	if !strings.Contains(err.Error(), "exceeds configured maximum") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -721,6 +765,13 @@ func TestIngestApprovalAllowCreatesGrant(t *testing.T) {
 	if !strings.Contains(out.String(), "file.write") {
 		t.Fatalf("grant output = %q", out.String())
 	}
+	store, err := capability.LoadGrantStore(grantPath)
+	if err != nil {
+		t.Fatalf("LoadGrantStore: %v", err)
+	}
+	if len(store.Grants) != 1 || store.Grants[0].Reason == "" {
+		t.Fatalf("approval grant missing reason: %+v", store.Grants)
+	}
 	out.Reset()
 	if err := run([]string{
 		"ingest",
@@ -742,7 +793,7 @@ func TestGrantRevokeQueuesDelivery(t *testing.T) {
 	grantPath := filepath.Join(dir, "grants.json")
 	deliveryPath := filepath.Join(dir, "deliveries.json")
 	var out, errOut bytes.Buffer
-	if err := run([]string{"grant", "--store", grantPath, "--session", "agent-42", "--capability", "network.connect", "--host", "github.com"}, &out, &errOut); err != nil {
+	if err := run([]string{"grant", "--store", grantPath, "--session", "agent-42", "--capability", "network.connect", "--host", "github.com", "--reason", "fetch dependency"}, &out, &errOut); err != nil {
 		t.Fatalf("grant: %v", err)
 	}
 	fields := strings.Fields(out.String())

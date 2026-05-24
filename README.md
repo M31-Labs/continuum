@@ -114,6 +114,9 @@ grant_store = ".continuum/grants.json"
 delivery_store = ".continuum/deliveries.json"
 session_store = ".continuum/sessions.json"
 airlock_store = ".continuum/airlock.json"
+
+[grant]
+max_ttl = "24h"
 ```
 
 ## Doctrine

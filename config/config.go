@@ -8,6 +8,7 @@ type Config struct {
 	Capabilities CapabilitiesConfig `json:"capabilities"`
 	State        StateConfig        `json:"state"`
 	Daemon       DaemonConfig       `json:"daemon"`
+	Grant        GrantConfig        `json:"grant"`
 	Enforcement  EnforcementConfig  `json:"enforcement"`
 	Approval     ApprovalConfig     `json:"approval"`
 }
@@ -47,6 +48,10 @@ type DaemonConfig struct {
 	CORSOrigins string `json:"cors_origins,omitempty"`
 }
 
+type GrantConfig struct {
+	MaxTTL string `json:"max_ttl,omitempty"`
+}
+
 type EnforcementConfig struct {
 	Network string `json:"network"`
 	File    string `json:"file"`
@@ -73,6 +78,7 @@ func Default() Config {
 			SessionStore:  ".continuum/sessions.json",
 			AirlockStore:  ".continuum/airlock.json",
 		},
+		Grant: GrantConfig{MaxTTL: "24h"},
 		Enforcement: EnforcementConfig{
 			Network: "observe",
 			File:    "observe",

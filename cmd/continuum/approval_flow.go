@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"m31labs.dev/continuum/approval"
@@ -22,7 +23,7 @@ const (
 	approvalCLI   approvalMode = "cli"
 )
 
-func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, record audit.Event, evt event.Event, grantStorePath string) error {
+func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, record audit.Event, evt event.Event, grantStorePath string, maxGrantTTL time.Duration) error {
 	if record.Outcome.Name != arbiterx.OutcomeAskHuman {
 		return nil
 	}
@@ -48,7 +49,8 @@ func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, re
 		fmt.Fprintf(stdout, "approval=denied session=%s reason=%q\n", req.Session, resp.Reason)
 		return nil
 	}
-	grant := approvalGrant(evt, record.Outcome, resp.Reason, time.Now().UTC())
+	reason := approvalReason(resp.Reason, record.Outcome, req)
+	grant := approvalGrant(evt, record.Outcome, reason, time.Now().UTC(), maxGrantTTL)
 	if err := capability.UpdateGrantStore(grantStorePath, func(store *capability.GrantStore) error {
 		return store.Add(grant)
 	}); err != nil {
@@ -58,9 +60,26 @@ func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, re
 	return nil
 }
 
-func approvalGrant(evt event.Event, outcome arbiterx.Outcome, reason string, now time.Time) capability.Grant {
+func approvalReason(responseReason string, outcome arbiterx.Outcome, req approval.Request) string {
+	if reason := strings.TrimSpace(responseReason); reason != "" {
+		return reason
+	}
+	if reason := strings.TrimSpace(outcome.Reason()); reason != "" {
+		return reason
+	}
+	if req.Question != "" {
+		return "approved: " + req.Question
+	}
+	return "approved governed request"
+}
+
+func approvalGrant(evt event.Event, outcome arbiterx.Outcome, reason string, now time.Time, maxGrantTTL time.Duration) capability.Grant {
 	if reason == "" {
 		reason = outcome.Reason()
+	}
+	ttl := 20 * time.Minute
+	if maxGrantTTL > 0 && ttl > maxGrantTTL {
+		ttl = maxGrantTTL
 	}
 	return capability.Grant{
 		ID:         fmt.Sprintf("grant_%d", now.UnixNano()),
@@ -69,7 +88,7 @@ func approvalGrant(evt event.Event, outcome arbiterx.Outcome, reason string, now
 		Scope:      approvalScope(evt),
 		Reason:     reason,
 		CreatedAt:  now,
-		ExpiresAt:  now.Add(20 * time.Minute),
+		ExpiresAt:  now.Add(ttl),
 	}
 }
 

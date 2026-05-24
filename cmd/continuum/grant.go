@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"m31labs.dev/continuum/capability"
@@ -43,6 +44,13 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 	if *session == "" || *capName == "" {
 		return usageError("Usage: continuum grant --session <id> --capability <name> [--host host --port port | --path path --op write | --comm go] --ttl 20m --reason <text>\n       continuum grant list|revoke|prune")
 	}
+	reasonText := strings.TrimSpace(*reason)
+	if reasonText == "" {
+		return usageError("grant --reason is required")
+	}
+	if *ttl <= 0 {
+		return usageError("grant --ttl must be positive")
+	}
 	now := time.Now().UTC()
 	scope := grantScope(*host, *port, *path, *pathPrefix, *op, *comm, *argvText, *argvPrefix)
 	if err := validateGrantScope(*capName, scope); err != nil {
@@ -52,13 +60,20 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	maxTTL, err := configuredMaxGrantTTL(cfg)
+	if err != nil {
+		return err
+	}
+	if *ttl > maxTTL {
+		return usageError(fmt.Sprintf("grant --ttl %s exceeds configured maximum %s", ttl.String(), maxTTL.String()))
+	}
 	*storePath = resolveGrantStorePath(*storePath, cfg)
 	grant := capability.Grant{
 		ID:         fmt.Sprintf("grant_%d", now.UnixNano()),
 		Session:    *session,
 		Capability: *capName,
 		Scope:      scope,
-		Reason:     *reason,
+		Reason:     reasonText,
 		CreatedAt:  now,
 		ExpiresAt:  now.Add(*ttl),
 	}
@@ -69,6 +84,17 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "grant id=%s session=%s capability=%s expires=%s reason=%q store=%s\n", grant.ID, grant.Session, grant.Capability, grant.ExpiresAt.Format(time.RFC3339), grant.Reason, *storePath)
 	return nil
+}
+
+func configuredMaxGrantTTL(cfg cliConfig) (time.Duration, error) {
+	maxTTL, err := time.ParseDuration(cfg.Config.Grant.MaxTTL)
+	if err != nil {
+		return 0, fmt.Errorf("grant.max_ttl %q is invalid: %w", cfg.Config.Grant.MaxTTL, err)
+	}
+	if maxTTL <= 0 {
+		return 0, fmt.Errorf("grant.max_ttl must be positive")
+	}
+	return maxTTL, nil
 }
 
 func grantScope(host string, port int, path, pathPrefix, op, comm, argvText, argvPrefix string) map[string]any {
