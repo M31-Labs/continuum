@@ -53,6 +53,11 @@ func CheckReadiness(daemon *Daemon, paths StatePaths) ReadinessStatus {
 	} else {
 		status.add("deliveries", true, "")
 	}
+	if _, err := LoadIDStore(paths.IDStore); err != nil {
+		status.add("ids", false, err.Error())
+	} else {
+		status.add("ids", true, "")
+	}
 	if _, err := airlock.LoadStore(paths.Airlock); err != nil {
 		status.add("airlock", false, err.Error())
 	} else {

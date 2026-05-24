@@ -24,7 +24,7 @@ type Engine struct {
 	Queue       *DeliveryStore
 	Enforcement string
 	Now         func() time.Time
-	NewID       func() string
+	NewID       IDFunc
 }
 
 func NewEngine(bundle *arbiterx.Bundle, sink audit.Sink) *Engine {
@@ -63,7 +63,10 @@ func (e *Engine) DecideFacts(ctx context.Context, evt event.Event, facts []arbit
 	if err != nil {
 		return audit.Event{}, decision, err
 	}
-	record := e.auditEvent(evt, decision)
+	record, err := e.auditEvent(evt, decision)
+	if err != nil {
+		return audit.Event{}, decision, err
+	}
 	var deliveryErr error
 	if decision.Selected != nil {
 		queueItem, err := e.enqueueDelivery(record, evt, *decision.Selected)
@@ -152,7 +155,7 @@ func (e *Engine) recordDeliveryAttempt(id string, attempt audit.DeliveryAttempt)
 	return e.Queue.Save()
 }
 
-func (e *Engine) auditEvent(evt event.Event, decision arbiterx.Decision) audit.Event {
+func (e *Engine) auditEvent(evt event.Event, decision arbiterx.Decision) (audit.Event, error) {
 	now := e.now()
 	eventTimeSource := audit.EventTimeSourceInputEvent
 	if evt.Time.IsZero() {
@@ -162,7 +165,11 @@ func (e *Engine) auditEvent(evt event.Event, decision arbiterx.Decision) audit.E
 	id := evt.ID
 	if id == "" {
 		if e.NewID != nil {
-			id = e.NewID()
+			var err error
+			id, err = e.NewID()
+			if err != nil {
+				return audit.Event{}, err
+			}
 		} else {
 			id = fmt.Sprintf("evt_%d", now.UnixNano())
 		}
@@ -191,7 +198,7 @@ func (e *Engine) auditEvent(evt event.Event, decision arbiterx.Decision) audit.E
 		Arbitraces:  decision.Arbitrace,
 		Capability:  e.RouteCapability(evt, outcome),
 		Enforcement: e.enforcementName(),
-	}
+	}, nil
 }
 
 func (e *Engine) now() time.Time {

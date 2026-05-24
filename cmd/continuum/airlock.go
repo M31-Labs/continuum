@@ -48,6 +48,7 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		reason := fs.String("reason", "", "reason")
 		configPath := fs.String("config", "continuum.toml", "config path")
 		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		idStorePath := fs.String("id-store", defaultIDStorePath, "monotonic id store")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -59,7 +60,11 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		*storePath = resolveAirlockStorePath(*storePath, cfg)
-		id := fmt.Sprintf("airlock-%d", time.Now().UnixNano())
+		*idStorePath = resolveIDStorePath(*idStorePath, cfg)
+		id, err := cruntime.NextIDWithSeparator(*idStorePath, "airlock", "-")
+		if err != nil {
+			return err
+		}
 		var session airlock.Session
 		if err := airlock.UpdateStore(*storePath, func(store *airlock.Store) error {
 			var err error

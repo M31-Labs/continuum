@@ -39,6 +39,7 @@ type DeliveryStore struct {
 	mu            sync.Mutex
 	Path          string         `json:"-"`
 	SchemaVersion int            `json:"schema_version"`
+	NextSequence  uint64         `json:"next_sequence,omitempty"`
 	Items         []DeliveryItem `json:"items"`
 }
 
@@ -87,7 +88,13 @@ func (s *DeliveryStore) MigrateSchema() error {
 	if s == nil {
 		return fmt.Errorf("nil delivery store")
 	}
-	return statefile.MigrateSchema("delivery store", &s.SchemaVersion, DeliveryStoreSchemaVersion, nil)
+	if err := statefile.MigrateSchema("delivery store", &s.SchemaVersion, DeliveryStoreSchemaVersion, nil); err != nil {
+		return err
+	}
+	if s.NextSequence == 0 {
+		s.NextSequence = uint64(len(s.Items) + 1)
+	}
+	return nil
 }
 
 func (s *DeliveryStore) Enqueue(item DeliveryItem) (DeliveryItem, error) {
@@ -103,11 +110,11 @@ func (s *DeliveryStore) Enqueue(item DeliveryItem) (DeliveryItem, error) {
 	if item.Status == "" {
 		item.Status = DeliveryPending
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if item.ID == "" {
 		item.ID = s.nextID(item.AuditID, item.Capability)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, existing := range s.Items {
 		if existing.ID == item.ID {
 			return DeliveryItem{}, fmt.Errorf("delivery %q already exists", item.ID)
@@ -200,6 +207,11 @@ func (s *DeliveryStore) Compact(opts RetentionOptions) (RetentionReport, error) 
 }
 
 func (s *DeliveryStore) nextID(auditID, cap string) string {
+	if s.NextSequence == 0 {
+		s.NextSequence = uint64(len(s.Items) + 1)
+	}
+	seq := s.NextSequence
+	s.NextSequence++
 	base := sanitizeDeliveryID(auditID)
 	if base == "" {
 		base = "delivery"
@@ -208,7 +220,7 @@ func (s *DeliveryStore) nextID(auditID, cap string) string {
 	if capPart != "" {
 		base += "_" + capPart
 	}
-	return fmt.Sprintf("dlv_%s_%d", base, len(s.Items)+1)
+	return fmt.Sprintf("dlv_%s_%d", base, seq)
 }
 
 func retainedTerminalDeliveryIndexes(items []DeliveryItem, retain int) map[int]bool {

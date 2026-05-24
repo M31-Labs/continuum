@@ -13,6 +13,7 @@ import (
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
 	"m31labs.dev/continuum/event"
+	cruntime "m31labs.dev/continuum/runtime"
 	"m31labs.dev/continuum/subject"
 )
 
@@ -24,7 +25,7 @@ const (
 	approvalCLI   approvalMode = "cli"
 )
 
-func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, sink audit.Sink, record audit.Event, evt event.Event, grantStorePath string, maxGrantTTL time.Duration) error {
+func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, sink audit.Sink, record audit.Event, evt event.Event, grantStorePath, idStorePath string, maxGrantTTL time.Duration) error {
 	if record.Outcome.Name != arbiterx.OutcomeAskHuman {
 		return nil
 	}
@@ -58,7 +59,12 @@ func handleAskHuman(ctx context.Context, mode approvalMode, stdout io.Writer, si
 		return nil
 	}
 	reason := approvalReason(resp.Reason, record.Outcome, req)
-	grant := approvalGrant(evt, record.Outcome, req.Requester, reason, time.Now().UTC(), maxGrantTTL)
+	now := time.Now().UTC()
+	id, err := cruntime.NextID(idStorePath, "grant")
+	if err != nil {
+		return err
+	}
+	grant := approvalGrant(id, evt, record.Outcome, req.Requester, reason, now, maxGrantTTL)
 	if err := capability.UpdateGrantStore(grantStorePath, func(store *capability.GrantStore) error {
 		return store.Add(grant)
 	}); err != nil {
@@ -131,7 +137,7 @@ func approvalReason(responseReason string, outcome arbiterx.Outcome, req approva
 	return "approved governed request"
 }
 
-func approvalGrant(evt event.Event, outcome arbiterx.Outcome, requester *subject.Identity, reason string, now time.Time, maxGrantTTL time.Duration) capability.Grant {
+func approvalGrant(id string, evt event.Event, outcome arbiterx.Outcome, requester *subject.Identity, reason string, now time.Time, maxGrantTTL time.Duration) capability.Grant {
 	if reason == "" {
 		reason = outcome.Reason()
 	}
@@ -140,7 +146,7 @@ func approvalGrant(evt event.Event, outcome arbiterx.Outcome, requester *subject
 		ttl = maxGrantTTL
 	}
 	return capability.Grant{
-		ID:         fmt.Sprintf("grant_%d", now.UnixNano()),
+		ID:         id,
 		Session:    evt.Subject.Session,
 		Capability: approvalCapability(evt),
 		Scope:      approvalScope(evt),

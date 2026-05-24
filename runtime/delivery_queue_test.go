@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,12 +66,51 @@ func TestDeliveryStoreSchemaMigration(t *testing.T) {
 	if legacy.SchemaVersion != DeliveryStoreSchemaVersion {
 		t.Fatalf("legacy schema version = %d", legacy.SchemaVersion)
 	}
+	if legacy.NextSequence != 1 {
+		t.Fatalf("legacy next sequence = %d", legacy.NextSequence)
+	}
 	futurePath := filepath.Join(dir, "future-deliveries.json")
 	if err := os.WriteFile(futurePath, []byte(`{"schema_version":99,"items":[]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadDeliveryStore(futurePath); err == nil {
 		t.Fatal("future delivery store schema loaded without error")
+	}
+}
+
+func TestDeliveryStoreIDSequenceSurvivesCompactionAndReload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "deliveries.json")
+	store, err := LoadDeliveryStore(path)
+	if err != nil {
+		t.Fatalf("LoadDeliveryStore: %v", err)
+	}
+	first, err := store.Enqueue(DeliveryItem{AuditID: "evt_first", Capability: "observe.audit", Status: DeliveryDelivered, CreatedAt: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatalf("Enqueue first: %v", err)
+	}
+	second, err := store.Enqueue(DeliveryItem{AuditID: "evt_second", Capability: "observe.audit", Status: DeliveryDelivered, CreatedAt: time.Date(2026, 5, 23, 13, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatalf("Enqueue second: %v", err)
+	}
+	if first.ID == second.ID || !strings.HasSuffix(first.ID, "_1") || !strings.HasSuffix(second.ID, "_2") {
+		t.Fatalf("delivery ids = %q %q", first.ID, second.ID)
+	}
+	if _, err := store.Compact(RetentionOptions{Retain: 1, Now: time.Date(2026, 5, 23, 14, 0, 0, 0, time.UTC)}); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	reloaded, err := LoadDeliveryStore(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	third, err := reloaded.Enqueue(DeliveryItem{AuditID: "evt_third", Capability: "observe.audit", Status: DeliveryPending})
+	if err != nil {
+		t.Fatalf("Enqueue third: %v", err)
+	}
+	if !strings.HasSuffix(third.ID, "_3") {
+		t.Fatalf("third id = %q", third.ID)
 	}
 }
 
@@ -155,7 +195,7 @@ func TestEngineWritesDeliveryQueue(t *testing.T) {
 	engine := NewEngine(bundle, sink)
 	engine.Queue = queue
 	engine.Now = func() time.Time { return time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC) }
-	engine.NewID = func() string { return "evt_delivery_link" }
+	engine.NewID = func() (string, error) { return "evt_delivery_link", nil }
 	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
 	evt := event.NewFileAccess(subj, "/repo/main.go", "write")
 	evt.ID = "evt_input_file_write"

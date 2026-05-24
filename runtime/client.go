@@ -23,6 +23,7 @@ type ClientIngestOptions struct {
 	SessionStore  string
 	GrantStore    string
 	DeliveryStore string
+	IDStore       string
 	AuditPath     string
 	AuthToken     string
 	AirlockPolicy string
@@ -48,6 +49,7 @@ func (c Client) Ingest(ctx context.Context, data []byte, opts ClientIngestOption
 	addQuery(query, "session-store", opts.SessionStore)
 	addQuery(query, "grants", opts.GrantStore)
 	addQuery(query, "delivery-store", opts.DeliveryStore)
+	addQuery(query, "id-store", opts.IDStore)
 	addQuery(query, "audit", opts.AuditPath)
 	addQuery(query, "airlock-policy", opts.AirlockPolicy)
 	addQuery(query, "airlock-store", opts.AirlockStore)

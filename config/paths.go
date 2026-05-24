@@ -22,5 +22,6 @@ func Resolve(cfg Config, configPath string) Config {
 	cfg.State.DeliveryStore = ResolvePath(configPath, cfg.State.DeliveryStore)
 	cfg.State.SessionStore = ResolvePath(configPath, cfg.State.SessionStore)
 	cfg.State.AirlockStore = ResolvePath(configPath, cfg.State.AirlockStore)
+	cfg.State.IDStore = ResolvePath(configPath, cfg.State.IDStore)
 	return cfg
 }

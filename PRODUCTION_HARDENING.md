@@ -23,7 +23,7 @@ enforcement backends exist and are reviewed.
 - [x] Add bounded retention/compaction for delivery, session, and audit state.
 - [x] Add state schema versions and migration hooks.
 - [x] Add explicit state backup/export/import commands.
-- [ ] Add monotonic ID generation that survives process restarts.
+- [x] Add monotonic ID generation that survives process restarts.
 
 ## Daemon Safety
 

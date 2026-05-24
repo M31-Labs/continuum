@@ -135,6 +135,7 @@ type statePathFlags struct {
 	deliveryStore *string
 	sessionStore  *string
 	airlockStore  *string
+	idStore       *string
 	audit         *string
 }
 
@@ -145,6 +146,7 @@ func addStatePathFlags(fs *flag.FlagSet) statePathFlags {
 		deliveryStore: fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store"),
 		sessionStore:  fs.String("session-store", defaultSessionStorePath, "session store"),
 		airlockStore:  fs.String("airlock-store", defaultAirlockStorePath, "airlock state store"),
+		idStore:       fs.String("id-store", defaultIDStorePath, "monotonic id store"),
 		audit:         fs.String("audit", defaultAuditPath, "audit JSONL path"),
 	}
 }
@@ -156,6 +158,7 @@ func resolveStatePaths(flags statePathFlags, fs *flag.FlagSet, cfg cliConfig) st
 		DeliveryStore: resolveDeliveryStorePath(*flags.deliveryStore, cfg),
 		SessionStore:  resolveSessionStorePath(*flags.sessionStore, cfg),
 		AirlockStore:  resolveAirlockStorePath(*flags.airlockStore, cfg),
+		IDStore:       resolveIDStorePath(*flags.idStore, cfg),
 		AuditLog:      resolveAuditPath(*flags.audit, flagSet(fs, "audit"), cfg),
 	}
 }

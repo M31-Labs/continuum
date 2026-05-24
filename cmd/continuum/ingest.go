@@ -27,6 +27,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	sessionPath := fs.String("sessions", defaultSessionStorePath, "session store for process lifecycle events")
 	grantPath := fs.String("grants", ".continuum/grants.json", "grant store")
 	deliveryPath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
+	idStorePath := fs.String("id-store", defaultIDStorePath, "monotonic id store")
 	approvalFlag := fs.String("approval", "deny", "approval mode: deny, allow, cli")
 	manifestDir := fs.String("manifest-dir", "", "Horizon capability manifest directory for Horizon event envelopes")
 	airlockPolicyPath := fs.String("airlock-policy", cruntime.DefaultAirlockPolicyPath, "airlock policy path")
@@ -47,6 +48,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	*airlockStorePath = resolveAirlockStorePath(*airlockStorePath, cfg)
+	*idStorePath = resolveIDStorePath(*idStorePath, cfg)
 	maxGrantTTL, err := configuredMaxGrantTTL(cfg)
 	if err != nil {
 		return err
@@ -70,6 +72,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			SessionStore:  *sessionPath,
 			GrantStore:    *grantPath,
 			DeliveryStore: *deliveryPath,
+			IDStore:       *idStorePath,
 			AuditPath:     *auditPath,
 			AuthToken:     *daemonToken,
 			AirlockPolicy: *airlockPolicyPath,
@@ -105,6 +108,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	}
 	defer sink.Close()
 	engine := cruntime.NewEngine(bundle, sink)
+	engine.NewID = cruntime.PersistentID(*idStorePath, "evt")
 	queue, err := cruntime.LoadDeliveryStore(*deliveryPath)
 	if err != nil {
 		return err
@@ -121,7 +125,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		printAuditLine(stdout, record)
-		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, sink, record, evt, *grantPath, maxGrantTTL); err != nil {
+		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, sink, record, evt, *grantPath, *idStorePath, maxGrantTTL); err != nil {
 			return err
 		}
 	}
@@ -141,6 +145,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			PolicyPath: *airlockPolicyPath,
 			StorePath:  *airlockStorePath,
 			AuditPath:  *auditPath,
+			IDStore:    *idStorePath,
 		})
 		if err != nil {
 			return err

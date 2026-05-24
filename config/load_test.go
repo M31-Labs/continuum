@@ -26,6 +26,9 @@ func TestLoadExampleConfig(t *testing.T) {
 	if cfg.State.DeliveryStore != ".continuum/deliveries.json" {
 		t.Fatalf("delivery store = %q", cfg.State.DeliveryStore)
 	}
+	if cfg.State.IDStore != ".continuum/ids.json" {
+		t.Fatalf("id store = %q", cfg.State.IDStore)
+	}
 	if cfg.Grant.MaxTTL != "24h" {
 		t.Fatalf("grant max ttl = %q", cfg.Grant.MaxTTL)
 	}
@@ -97,5 +100,8 @@ func TestResolvePathsRelativeToConfig(t *testing.T) {
 	}
 	if resolved.State.DeliveryStore != filepath.Join("examples", "agent-workdir", ".continuum", "deliveries.json") {
 		t.Fatalf("delivery store = %q", resolved.State.DeliveryStore)
+	}
+	if resolved.State.IDStore != filepath.Join("examples", "agent-workdir", ".continuum", "ids.json") {
+		t.Fatalf("id store = %q", resolved.State.IDStore)
 	}
 }

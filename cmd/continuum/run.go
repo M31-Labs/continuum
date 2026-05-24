@@ -31,6 +31,7 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	grantPath := fs.String("grants", ".continuum/grants.json", "grant store")
 	deliveryPath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	sessionPath := fs.String("sessions", ".continuum/sessions.json", "session store")
+	idStorePath := fs.String("id-store", defaultIDStorePath, "monotonic id store")
 	approvalFlag := fs.String("approval", "deny", "approval mode: deny, allow, cli")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -53,6 +54,7 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	*sessionPath = resolveSessionStorePath(*sessionPath, cfg)
+	*idStorePath = resolveIDStorePath(*idStorePath, cfg)
 	maxGrantTTL, err := configuredMaxGrantTTL(cfg)
 	if err != nil {
 		return err
@@ -61,7 +63,10 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	session := fmt.Sprintf("agent-session-%d", time.Now().UnixNano())
+	session, err := cruntime.NextIDWithSeparator(*idStorePath, "agent-session", "-")
+	if err != nil {
+		return err
+	}
 	resolvedPolicy, err := resolvePolicyPath(*policyPath, *policyStorePath, cfg)
 	if err != nil {
 		return err
@@ -77,6 +82,7 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	}
 	defer sink.Close()
 	engine := cruntime.NewEngine(bundle, sink)
+	engine.NewID = cruntime.PersistentID(*idStorePath, "evt")
 	queue, err := cruntime.LoadDeliveryStore(*deliveryPath)
 	if err != nil {
 		return err
@@ -142,7 +148,7 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		printAuditLine(stdout, record)
-		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, sink, record, evt, *grantPath, maxGrantTTL); err != nil {
+		if err := handleAskHuman(context.Background(), approvalMode(*approvalFlag), stdout, sink, record, evt, *grantPath, *idStorePath, maxGrantTTL); err != nil {
 			_ = cmd.Process.Kill()
 			_, _ = cmd.Process.Wait()
 			return err

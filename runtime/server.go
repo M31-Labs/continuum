@@ -22,6 +22,7 @@ type StatePaths struct {
 	Sessions      string
 	Grants        string
 	Deliveries    string
+	IDStore       string
 	Airlock       string
 	AirlockPolicy string
 	Audit         string
@@ -200,6 +201,7 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 			SessionStore:  queryPathAny(r, []string{"sessions", "session-store", "session_store"}, paths.Sessions),
 			GrantStore:    queryPathAny(r, []string{"grants", "grant-store", "grant_store"}, paths.Grants),
 			DeliveryStore: queryPathAny(r, []string{"delivery-store", "delivery_store"}, paths.Deliveries),
+			IDStore:       queryPathAny(r, []string{"id-store", "id_store"}, paths.IDStore),
 			AuditPath:     queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
 			Registry:      daemon.Registry,
 			EnableAirlock: !truthy(r.URL.Query().Get("no_airlock")),
@@ -303,6 +305,9 @@ func (p StatePaths) withDefaults() StatePaths {
 	}
 	if p.Deliveries == "" {
 		p.Deliveries = ".continuum/deliveries.json"
+	}
+	if p.IDStore == "" {
+		p.IDStore = ".continuum/ids.json"
 	}
 	if p.Airlock == "" {
 		p.Airlock = ".continuum/airlock.json"

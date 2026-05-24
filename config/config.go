@@ -42,6 +42,7 @@ type StateConfig struct {
 	DeliveryStore string `json:"delivery_store"`
 	SessionStore  string `json:"session_store"`
 	AirlockStore  string `json:"airlock_store"`
+	IDStore       string `json:"id_store"`
 }
 
 type DaemonConfig struct {
@@ -77,6 +78,7 @@ func Default() Config {
 			DeliveryStore: ".continuum/deliveries.json",
 			SessionStore:  ".continuum/sessions.json",
 			AirlockStore:  ".continuum/airlock.json",
+			IDStore:       ".continuum/ids.json",
 		},
 		Grant: GrantConfig{MaxTTL: "24h"},
 		Enforcement: EnforcementConfig{

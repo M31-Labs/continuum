@@ -27,6 +27,7 @@ const (
 	ItemDeliveryStore = "delivery_store"
 	ItemSessionStore  = "session_store"
 	ItemAirlockStore  = "airlock_store"
+	ItemIDStore       = "id_store"
 	ItemAuditLog      = "audit_log"
 )
 
@@ -41,6 +42,7 @@ type Paths struct {
 	DeliveryStore string
 	SessionStore  string
 	AirlockStore  string
+	IDStore       string
 	AuditLog      string
 }
 
@@ -252,6 +254,7 @@ func KnownItemNames() []string {
 		ItemDeliveryStore,
 		ItemSessionStore,
 		ItemAirlockStore,
+		ItemIDStore,
 		ItemAuditLog,
 	}
 	slices.Sort(names)
@@ -265,6 +268,7 @@ func itemSpecs(paths Paths) []itemSpec {
 		{name: ItemDeliveryStore, kind: KindJSON, path: paths.DeliveryStore},
 		{name: ItemSessionStore, kind: KindJSON, path: paths.SessionStore},
 		{name: ItemAirlockStore, kind: KindJSON, path: paths.AirlockStore},
+		{name: ItemIDStore, kind: KindJSON, path: paths.IDStore},
 		{name: ItemAuditLog, kind: KindJSONL, path: paths.AuditLog},
 	}
 }
@@ -338,6 +342,8 @@ func validateItemBytes(name string, data []byte) error {
 		_, err = cruntime.LoadSessionStore(path)
 	case ItemAirlockStore:
 		_, err = airlock.LoadStore(path)
+	case ItemIDStore:
+		_, err = cruntime.LoadIDStore(path)
 	case ItemAuditLog:
 		_, err = audit.ReadJSONL(path)
 	default:

@@ -45,6 +45,7 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 	reason := fs.String("reason", "", "reason")
 	configPath := fs.String("config", "continuum.toml", "config path")
 	storePath := fs.String("store", defaultGrantStorePath, "grant store")
+	idStorePath := fs.String("id-store", defaultIDStorePath, "monotonic id store")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -75,8 +76,13 @@ func runGrant(args []string, stdout, stderr io.Writer) error {
 		return usageError(fmt.Sprintf("grant --ttl %s exceeds configured maximum %s", ttl.String(), maxTTL.String()))
 	}
 	*storePath = resolveGrantStorePath(*storePath, cfg)
+	*idStorePath = resolveIDStorePath(*idStorePath, cfg)
+	id, err := cruntime.NextID(*idStorePath, "grant")
+	if err != nil {
+		return err
+	}
 	grant := capability.Grant{
-		ID:         fmt.Sprintf("grant_%d", now.UnixNano()),
+		ID:         id,
 		Session:    *session,
 		Capability: *capName,
 		Scope:      scope,

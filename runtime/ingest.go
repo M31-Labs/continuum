@@ -30,7 +30,8 @@ type IngestOptions struct {
 	AuditPath     string
 	Registry      *capability.Registry
 	Now           func() time.Time
-	NewID         func() string
+	NewID         IDFunc
+	IDStore       string
 	Airlock       AirlockOptions
 	EnableAirlock bool
 }
@@ -74,6 +75,8 @@ func IngestEvents(ctx context.Context, events []event.Event, opts IngestOptions)
 	}
 	if opts.NewID != nil {
 		engine.NewID = opts.NewID
+	} else if opts.IDStore != "" {
+		engine.NewID = PersistentID(opts.IDStore, "evt")
 	}
 	if opts.GrantStore != "" {
 		grants, err := capability.LoadGrantStore(opts.GrantStore)
@@ -130,7 +133,10 @@ func IngestEvents(ctx context.Context, events []event.Event, opts IngestOptions)
 			airlockOpts.Now = opts.Now
 		}
 		if airlockOpts.NewID == nil {
-			airlockOpts.NewID = opts.NewID
+			airlockOpts.NewID = engine.NewID
+		}
+		if airlockOpts.IDStore == "" {
+			airlockOpts.IDStore = opts.IDStore
 		}
 		airlocks, err := EvaluateAirlockForEvents(ctx, events, airlockOpts)
 		if err != nil {
@@ -161,11 +167,13 @@ func ResolvePolicyPath(explicitPath, storePath, fallback string) (string, error)
 }
 
 type AirlockOptions struct {
-	PolicyPath string
-	StorePath  string
-	AuditPath  string
-	Now        func() time.Time
-	NewID      func() string
+	PolicyPath   string
+	StorePath    string
+	AuditPath    string
+	Now          func() time.Time
+	NewID        IDFunc
+	NewAirlockID IDFunc
+	IDStore      string
 }
 
 type AirlockResult struct {
@@ -221,6 +229,8 @@ func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts Ai
 	}
 	if opts.NewID != nil {
 		engine.NewID = opts.NewID
+	} else if opts.IDStore != "" {
+		engine.NewID = PersistentID(opts.IDStore, "evt")
 	}
 	results := make([]AirlockResult, 0, len(candidates))
 	type airlockEntry struct {
@@ -233,8 +243,12 @@ func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts Ai
 	var entries []airlockEntry
 	for i, behavior := range candidates {
 		now := engine.now()
+		inputID, err := airlockInputID(opts, now, i)
+		if err != nil {
+			return nil, err
+		}
 		input := event.Event{
-			ID:      fmt.Sprintf("evt_airlock_%d_%d", now.UnixNano(), i),
+			ID:      inputID,
 			Kind:    "behavior.summary",
 			Subject: subject.NewProcessTree(behavior.Subject, 0),
 			Fields: map[string]any{
@@ -251,9 +265,13 @@ func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts Ai
 		}
 		result := AirlockResult{Behavior: behavior, Record: record, Decision: decision}
 		if decision.Selected != nil && decision.Selected.Name == arbiterx.OutcomeEnterAirlock && opts.StorePath != "" {
+			id, err := airlockSessionID(opts, now, i)
+			if err != nil {
+				return nil, err
+			}
 			entries = append(entries, airlockEntry{
 				index:    len(results),
-				id:       fmt.Sprintf("airlock-%d-%d", now.UnixNano(), i),
+				id:       id,
 				subject:  subject.NewProcessTree(behavior.Subject, 0),
 				reason:   decision.Selected.Reason(),
 				observed: now,
@@ -276,6 +294,26 @@ func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts Ai
 		}
 	}
 	return results, nil
+}
+
+func airlockInputID(opts AirlockOptions, now time.Time, index int) (string, error) {
+	if opts.NewID != nil {
+		return opts.NewID()
+	}
+	if opts.IDStore != "" {
+		return NextID(opts.IDStore, "evt_airlock")
+	}
+	return fmt.Sprintf("evt_airlock_%d_%d", now.UnixNano(), index), nil
+}
+
+func airlockSessionID(opts AirlockOptions, now time.Time, index int) (string, error) {
+	if opts.NewAirlockID != nil {
+		return opts.NewAirlockID()
+	}
+	if opts.IDStore != "" {
+		return NextIDWithSeparator(opts.IDStore, "airlock", "-")
+	}
+	return fmt.Sprintf("airlock-%d-%d", now.UnixNano(), index), nil
 }
 
 func shouldEvaluateAirlock(behavior airlock.Behavior) bool {

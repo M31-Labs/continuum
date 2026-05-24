@@ -52,6 +52,7 @@ type doctorOptions struct {
 	DeliveryStorePath string
 	AirlockStorePath  string
 	SessionStorePath  string
+	IDStorePath       string
 	AuditPath         string
 }
 
@@ -67,6 +68,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 	fs.StringVar(&opts.DeliveryStorePath, "delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	fs.StringVar(&opts.AirlockStorePath, "airlock-store", defaultAirlockStorePath, "airlock state store")
 	fs.StringVar(&opts.SessionStorePath, "session-store", defaultSessionStorePath, "session store")
+	fs.StringVar(&opts.IDStorePath, "id-store", defaultIDStorePath, "monotonic id store")
 	fs.StringVar(&opts.AuditPath, "audit", defaultAuditPath, "audit JSONL path")
 	jsonOut := fs.Bool("json", false, "emit JSON")
 	if err := fs.Parse(args); err != nil {
@@ -120,6 +122,7 @@ func buildDoctorReport(opts doctorOptions) doctorReport {
 	deliveryStorePath := resolveDeliveryStorePath(opts.DeliveryStorePath, cliCfg)
 	airlockStorePath := resolveAirlockStorePath(opts.AirlockStorePath, cliCfg)
 	sessionStorePath := resolveSessionStorePath(opts.SessionStorePath, cliCfg)
+	idStorePath := resolveIDStorePath(opts.IDStorePath, cliCfg)
 	auditPath := resolveAuditPath(opts.AuditPath, opts.AuditPath != defaultAuditPath, cliCfg)
 
 	policyPath, err := resolvePolicyPath(opts.PolicyPath, policyStorePath, cliCfg)
@@ -136,6 +139,7 @@ func buildDoctorReport(opts doctorOptions) doctorReport {
 	report.checkDeliveryStore(deliveryStorePath, seenParents)
 	report.checkAirlockStore(airlockStorePath, seenParents)
 	report.checkSessionStore(sessionStorePath, seenParents)
+	report.checkIDStore(idStorePath, seenParents)
 	report.checkAuditLog(auditPath, seenParents)
 	report.checkEnforcement(cfg.Enforcement)
 	return report
@@ -256,6 +260,16 @@ func (r *doctorReport) checkSessionStore(path string, seenParents map[string]boo
 		return
 	}
 	r.add(doctorOK, "session store", fmt.Sprintf("sessions=%d running=%d", len(store.Sessions), len(store.Running())), path)
+}
+
+func (r *doctorReport) checkIDStore(path string, seenParents map[string]bool) {
+	r.checkPrivateStateFile("id store", path, seenParents)
+	store, err := cruntime.LoadIDStore(path)
+	if err != nil {
+		r.add(doctorFail, "id store", fmt.Sprintf("cannot read id store: %v", err), path)
+		return
+	}
+	r.add(doctorOK, "id store", fmt.Sprintf("counters=%d", len(store.Counters)), path)
 }
 
 func (r *doctorReport) checkAuditLog(path string, seenParents map[string]bool) {

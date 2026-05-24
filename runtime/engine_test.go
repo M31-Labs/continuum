@@ -24,7 +24,7 @@ func TestEngineDecideEventWritesAudit(t *testing.T) {
 	sink := &memorySink{}
 	engine := NewEngine(bundle, sink)
 	engine.Now = func() time.Time { return time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC) }
-	engine.NewID = func() string { return "evt_test" }
+	engine.NewID = func() (string, error) { return "evt_test", nil }
 
 	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
 	record, decision, err := engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/home/draco/.ssh/id_ed25519", "read"))

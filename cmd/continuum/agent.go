@@ -89,6 +89,7 @@ func daemonStatePaths(cfg config.Config) cruntime.StatePaths {
 		Sessions:     cfg.State.SessionStore,
 		Grants:       cfg.State.GrantStore,
 		Deliveries:   cfg.State.DeliveryStore,
+		IDStore:      cfg.State.IDStore,
 		Airlock:      cfg.State.AirlockStore,
 		Audit:        cfg.Audit.Path,
 	}

@@ -141,6 +141,8 @@ func assign(cfg *Config, section, key, value string) error {
 			cfg.State.SessionStore = value
 		case "airlock_store":
 			cfg.State.AirlockStore = value
+		case "id_store":
+			cfg.State.IDStore = value
 		default:
 			return unknown(section, key)
 		}

@@ -13,6 +13,7 @@ const (
 	defaultDeliveryStorePath = ".continuum/deliveries.json"
 	defaultSessionStorePath  = ".continuum/sessions.json"
 	defaultAirlockStorePath  = ".continuum/airlock.json"
+	defaultIDStorePath       = ".continuum/ids.json"
 	defaultAuditPath         = ".continuum/audit.jsonl"
 )
 
@@ -120,6 +121,16 @@ func resolveAirlockStorePath(path string, cfg cliConfig) string {
 	}
 	if cfg.ConfigPath != "<default>" && cfg.Config.State.AirlockStore != "" {
 		return cfg.Config.State.AirlockStore
+	}
+	return path
+}
+
+func resolveIDStorePath(path string, cfg cliConfig) string {
+	if path != "" && path != defaultIDStorePath {
+		return path
+	}
+	if cfg.ConfigPath != "<default>" && cfg.Config.State.IDStore != "" {
+		return cfg.Config.State.IDStore
 	}
 	return path
 }

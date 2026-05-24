@@ -45,6 +45,7 @@ func Validate(cfg Config) error {
 		"delivery_store": cfg.State.DeliveryStore,
 		"session_store":  cfg.State.SessionStore,
 		"airlock_store":  cfg.State.AirlockStore,
+		"id_store":       cfg.State.IDStore,
 	} {
 		if path == "" {
 			return fmt.Errorf("state.%s is required", name)
