@@ -1,4 +1,4 @@
-.PHONY: test fmt vet
+.PHONY: test fmt vet race
 
 test:
 	go test ./...
@@ -8,3 +8,6 @@ fmt:
 
 vet:
 	go vet ./...
+
+race:
+	go test -race ./...

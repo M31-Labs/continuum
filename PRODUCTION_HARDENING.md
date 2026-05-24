@@ -134,8 +134,8 @@ enforcement backends exist and are reviewed.
 
 ## CI And Quality Gates
 
-- [ ] Add race detector CI job.
-- [ ] Add `go vet` to CI.
+- [x] Add race detector CI job.
+- [x] Add `go vet` to CI.
 - [ ] Add staticcheck CI.
 - [ ] Add govulncheck CI.
 - [ ] Add coverage report generation.
