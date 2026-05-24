@@ -34,4 +34,7 @@ func TestStorePublishActivateAndReload(t *testing.T) {
 	if !ok || active.Name != "agent-workdir" {
 		t.Fatalf("active = %+v, %v", active, ok)
 	}
+	if active.Provenance.SourceSHA256 == "" || active.Provenance.SourceBytes == 0 || active.Provenance.Compiler == "" {
+		t.Fatalf("missing provenance: %+v", active.Provenance)
+	}
 }

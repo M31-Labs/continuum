@@ -485,7 +485,7 @@ func TestPolicyListAndShowCommands(t *testing.T) {
 	if err := run([]string{"policy", "show", "--store", store, "agent-workdir"}, &out, &errOut); err != nil {
 		t.Fatalf("policy show: %v", err)
 	}
-	if !strings.Contains(out.String(), "active=true") || !strings.Contains(out.String(), "kind=agent-workdir") {
+	if !strings.Contains(out.String(), "active=true") || !strings.Contains(out.String(), "kind=agent-workdir") || !strings.Contains(out.String(), "source_sha256=") {
 		t.Fatalf("policy show output = %q", out.String())
 	}
 }

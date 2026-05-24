@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -14,11 +16,19 @@ type Store struct {
 }
 
 type StoredBundle struct {
-	Name      string    `json:"name"`
-	ID        string    `json:"id"`
-	Kind      string    `json:"kind"`
-	Path      string    `json:"path"`
-	Published time.Time `json:"published"`
+	Name       string     `json:"name"`
+	ID         string     `json:"id"`
+	Kind       string     `json:"kind"`
+	Path       string     `json:"path"`
+	Published  time.Time  `json:"published"`
+	Provenance Provenance `json:"provenance,omitempty"`
+}
+
+type Provenance struct {
+	SourcePath   string `json:"source_path,omitempty"`
+	SourceSHA256 string `json:"source_sha256,omitempty"`
+	SourceBytes  int    `json:"source_bytes,omitempty"`
+	Compiler     string `json:"compiler,omitempty"`
 }
 
 func LoadStore(path string) (*Store, error) {
@@ -67,13 +77,31 @@ func (s *Store) Publish(bundle Bundle, now time.Time) error {
 		s.Bundles = map[string]StoredBundle{}
 	}
 	s.Bundles[bundle.Name] = StoredBundle{
-		Name:      bundle.Name,
-		ID:        bundle.Program.ID,
-		Kind:      bundle.Program.Kind,
-		Path:      bundle.Path,
-		Published: now,
+		Name:       bundle.Name,
+		ID:         bundle.Program.ID,
+		Kind:       bundle.Program.Kind,
+		Path:       bundle.Path,
+		Published:  now,
+		Provenance: BundleProvenance(bundle),
 	}
 	return nil
+}
+
+func BundleProvenance(bundle Bundle) Provenance {
+	provenance := Provenance{
+		SourcePath: bundle.Path,
+		Compiler:   "github.com/odvcencio/arbiter",
+	}
+	if bundle.Program == nil {
+		return provenance
+	}
+	source := []byte(bundle.Program.Source)
+	if len(source) > 0 {
+		sum := sha256.Sum256(source)
+		provenance.SourceSHA256 = hex.EncodeToString(sum[:])
+		provenance.SourceBytes = len(source)
+	}
+	return provenance
 }
 
 func (s *Store) Activate(name string) error {

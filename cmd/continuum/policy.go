@@ -165,7 +165,7 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		if bundle.Name == store.Active {
 			active = "true"
 		}
-		fmt.Fprintf(stdout, "name=%s id=%s kind=%s active=%s path=%s published=%s\n", bundle.Name, bundle.ID, bundle.Kind, active, bundle.Path, bundle.Published.Format(time.RFC3339))
+		fmt.Fprintf(stdout, "name=%s id=%s kind=%s active=%s path=%s published=%s source_sha256=%s source_bytes=%d compiler=%s\n", bundle.Name, bundle.ID, bundle.Kind, active, bundle.Path, bundle.Published.Format(time.RFC3339), bundle.Provenance.SourceSHA256, bundle.Provenance.SourceBytes, bundle.Provenance.Compiler)
 		return nil
 	default:
 		return usageError("Usage: continuum policy check <file.arb> | publish <file.arb> | activate <name> | list | show <name>")
