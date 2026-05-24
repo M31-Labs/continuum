@@ -464,6 +464,33 @@ func TestPolicyActivateCommand(t *testing.T) {
 	}
 }
 
+func TestPolicyRollbackCommand(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "policies.json")
+	var out, errOut bytes.Buffer
+	if err := run([]string{"policy", "publish", "--store", store, "../../examples/agent-workdir/policies/main.arb"}, &out, &errOut); err != nil {
+		t.Fatalf("policy publish agent: %v", err)
+	}
+	out.Reset()
+	if err := run([]string{"policy", "publish", "--store", store, "../../examples/airlock/policies/main.arb"}, &out, &errOut); err != nil {
+		t.Fatalf("policy publish airlock: %v", err)
+	}
+	out.Reset()
+	if err := run([]string{"policy", "activate", "--store", store, "agent-workdir"}, &out, &errOut); err != nil {
+		t.Fatalf("policy activate agent: %v", err)
+	}
+	out.Reset()
+	if err := run([]string{"policy", "activate", "--store", store, "airlock"}, &out, &errOut); err != nil {
+		t.Fatalf("policy activate airlock: %v", err)
+	}
+	out.Reset()
+	if err := run([]string{"policy", "rollback", "--store", store}, &out, &errOut); err != nil {
+		t.Fatalf("policy rollback: %v", err)
+	}
+	if !strings.Contains(out.String(), "rolled back policy name=agent-workdir") || !strings.Contains(out.String(), "previous=airlock") {
+		t.Fatalf("rollback output = %q", out.String())
+	}
+}
+
 func TestPolicyListAndShowCommands(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "policies.json")
 	var out, errOut bytes.Buffer

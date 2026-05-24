@@ -17,7 +17,7 @@ import (
 
 func runPolicy(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return usageError("Usage: continuum policy check <file.arb> | publish <file.arb> | activate <name> | list | show <name>")
+		return usageError("Usage: continuum policy check <file.arb> | publish <file.arb> | activate <name> | rollback | list | show <name>")
 	}
 	switch args[0] {
 	case "check":
@@ -100,6 +100,37 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "activated policy name=%s store=%s\n", fs.Arg(0), *storePath)
 		return nil
+	case "rollback":
+		fs := flag.NewFlagSet("policy rollback", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultPolicyStorePath, "policy store path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return usageError("Usage: continuum policy rollback [--config continuum.toml] [--store .continuum/policies.json]")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolvePolicyStorePath(*storePath, cfg)
+		previous := ""
+		rolledBack := policy.StoredBundle{}
+		if err := policy.UpdateStore(*storePath, func(store *policy.Store) error {
+			previous = store.Active
+			var err error
+			rolledBack, err = store.Rollback()
+			if err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "rolled back policy name=%s previous=%s store=%s\n", rolledBack.Name, previous, *storePath)
+		return nil
 	case "list":
 		fs := flag.NewFlagSet("policy list", flag.ContinueOnError)
 		fs.SetOutput(stderr)
@@ -168,7 +199,7 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "name=%s id=%s kind=%s active=%s path=%s published=%s source_sha256=%s source_bytes=%d compiler=%s\n", bundle.Name, bundle.ID, bundle.Kind, active, bundle.Path, bundle.Published.Format(time.RFC3339), bundle.Provenance.SourceSHA256, bundle.Provenance.SourceBytes, bundle.Provenance.Compiler)
 		return nil
 	default:
-		return usageError("Usage: continuum policy check <file.arb> | publish <file.arb> | activate <name> | list | show <name>")
+		return usageError("Usage: continuum policy check <file.arb> | publish <file.arb> | activate <name> | rollback | list | show <name>")
 	}
 }
 

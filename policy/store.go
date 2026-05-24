@@ -10,9 +10,10 @@ import (
 )
 
 type Store struct {
-	Path    string                  `json:"-"`
-	Active  string                  `json:"active,omitempty"`
-	Bundles map[string]StoredBundle `json:"bundles,omitempty"`
+	Path              string                  `json:"-"`
+	Active            string                  `json:"active,omitempty"`
+	Bundles           map[string]StoredBundle `json:"bundles,omitempty"`
+	ActivationHistory []ActivationRecord      `json:"activation_history,omitempty"`
 }
 
 type StoredBundle struct {
@@ -29,6 +30,12 @@ type Provenance struct {
 	SourceSHA256 string `json:"source_sha256,omitempty"`
 	SourceBytes  int    `json:"source_bytes,omitempty"`
 	Compiler     string `json:"compiler,omitempty"`
+}
+
+type ActivationRecord struct {
+	From string    `json:"from,omitempty"`
+	To   string    `json:"to"`
+	Time time.Time `json:"time"`
 }
 
 func LoadStore(path string) (*Store, error) {
@@ -105,14 +112,48 @@ func BundleProvenance(bundle Bundle) Provenance {
 }
 
 func (s *Store) Activate(name string) error {
+	return s.ActivateAt(name, time.Now().UTC())
+}
+
+func (s *Store) ActivateAt(name string, now time.Time) error {
 	if s == nil {
 		return fmt.Errorf("nil policy store")
 	}
 	if _, ok := s.Bundles[name]; !ok {
 		return fmt.Errorf("policy bundle %q is not published", name)
 	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if s.Active != name {
+		s.ActivationHistory = append(s.ActivationHistory, ActivationRecord{
+			From: s.Active,
+			To:   name,
+			Time: now,
+		})
+	}
 	s.Active = name
 	return nil
+}
+
+func (s *Store) Rollback() (StoredBundle, error) {
+	if s == nil {
+		return StoredBundle{}, fmt.Errorf("nil policy store")
+	}
+	for len(s.ActivationHistory) > 0 {
+		last := s.ActivationHistory[len(s.ActivationHistory)-1]
+		s.ActivationHistory = s.ActivationHistory[:len(s.ActivationHistory)-1]
+		if last.To != s.Active || last.From == "" {
+			continue
+		}
+		bundle, ok := s.Bundles[last.From]
+		if !ok {
+			return StoredBundle{}, fmt.Errorf("previous policy bundle %q is not published", last.From)
+		}
+		s.Active = last.From
+		return bundle, nil
+	}
+	return StoredBundle{}, fmt.Errorf("no previous policy activation to roll back to")
 }
 
 func (s *Store) ActiveBundle() (StoredBundle, bool) {
