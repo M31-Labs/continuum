@@ -28,6 +28,23 @@ func TestStatusCommand(t *testing.T) {
 	}
 }
 
+func TestVersionCommand(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if err := run([]string{"version"}, &out, &errOut); err != nil {
+		t.Fatalf("run version: %v", err)
+	}
+	if !strings.Contains(out.String(), "version=dev") || !strings.Contains(out.String(), "commit=unknown") {
+		t.Fatalf("version output = %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"version", "--json"}, &out, &errOut); err != nil {
+		t.Fatalf("run version --json: %v", err)
+	}
+	if !strings.Contains(out.String(), `"version":"dev"`) {
+		t.Fatalf("version json output = %q", out.String())
+	}
+}
+
 func TestAgentStartValidatesPolicyBeforeServing(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "continuum.toml")

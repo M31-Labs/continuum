@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const commandList = "run, ingest, sessions, agent, status, capabilities, policy, grant, audit, explain, replay, airlock"
+const commandList = "run, ingest, sessions, agent, status, version, capabilities, policy, grant, audit, explain, replay, airlock"
 
 type usageError string
 
@@ -40,6 +40,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runAgent(args[1:], stdout, stderr)
 	case "status":
 		return runStatus(args[1:], stdout, stderr)
+	case "version":
+		return runVersion(args[1:], stdout, stderr)
 	case "capabilities":
 		return runCapabilities(args[1:], stdout, stderr)
 	case "policy":

@@ -42,6 +42,7 @@ continuum run --agent claude --repo . -- claude code
 continuum ingest --events testdata/events/file_secret_access.json --approval deny
 continuum sessions list
 continuum sessions show agent-session-42
+continuum version
 continuum agent start --config continuum.toml --listen 8787 --auth-token "$CONTINUUM_DAEMON_TOKEN"
 continuum agent start --config continuum.toml --unix-socket .continuum/daemon.sock
 curl -X POST --data-binary @events.jsonl http://127.0.0.1:8787/ingest

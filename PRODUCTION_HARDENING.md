@@ -122,7 +122,7 @@ enforcement backends exist and are reviewed.
 ## Operator Experience
 
 - [ ] Add `continuum doctor` for config, paths, policies, and permissions.
-- [ ] Add `continuum version` with commit and build metadata.
+- [x] Add `continuum version` with commit and build metadata.
 - [ ] Add structured JSON output for every inspection command.
 - [ ] Add clear public README status badges and safety boundary language.
 - [ ] Add quickstart for observe-mode production pilot.
