@@ -57,12 +57,20 @@ func TestEngineWritesDeliveryQueue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadDeliveryStore: %v", err)
 	}
-	engine := NewEngine(bundle, audit.NopSink{})
+	sink := &memorySink{}
+	engine := NewEngine(bundle, sink)
 	engine.Queue = queue
 	engine.Now = func() time.Time { return time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC) }
+	engine.NewID = func() string { return "evt_delivery_link" }
 	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
-	if _, _, err := engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/repo/main.go", "write")); err != nil {
+	evt := event.NewFileAccess(subj, "/repo/main.go", "write")
+	evt.ID = "evt_input_file_write"
+	record, _, err := engine.DecideEvent(context.Background(), evt)
+	if err != nil {
 		t.Fatalf("DecideEvent: %v", err)
+	}
+	if len(sink.events) != 1 || len(record.Delivery) != 1 || len(sink.events[0].Delivery) != 1 {
+		t.Fatalf("audit delivery records record=%+v sink=%+v", record.Delivery, sink.events)
 	}
 	reloaded, err := LoadDeliveryStore(path)
 	if err != nil {
@@ -71,5 +79,15 @@ func TestEngineWritesDeliveryQueue(t *testing.T) {
 	items := reloaded.List()
 	if len(items) != 1 || items[0].Status != DeliveryDelivered || len(items[0].Attempts) != 1 {
 		t.Fatalf("items = %+v", items)
+	}
+	item := items[0]
+	if item.AuditID != record.ID || item.EventID != evt.ID || item.Capability != record.Capability || item.Enforcement != record.Enforcement {
+		t.Fatalf("delivery item linkage item=%+v record=%+v event=%+v", item, record, evt)
+	}
+	if record.Delivery[0].DeliveryID != item.ID || item.Attempts[0].DeliveryID != item.ID {
+		t.Fatalf("attempt delivery IDs item=%s audit=%+v queue=%+v", item.ID, record.Delivery[0], item.Attempts[0])
+	}
+	if record.Delivery[0].Status != item.Attempts[0].Status || record.Delivery[0].Capability != item.Attempts[0].Capability || record.Delivery[0].Enforcement != item.Attempts[0].Enforcement {
+		t.Fatalf("attempt mismatch audit=%+v queue=%+v", record.Delivery[0], item.Attempts[0])
 	}
 }

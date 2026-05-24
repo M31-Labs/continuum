@@ -71,6 +71,7 @@ func (e *Engine) DecideFacts(ctx context.Context, evt event.Event, facts []arbit
 			return record, decision, err
 		}
 		attempt := audit.DeliveryAttempt{
+			DeliveryID:  queueItem.ID,
 			Time:        e.now(),
 			Capability:  record.Capability,
 			Enforcement: e.enforcementName(),
@@ -153,8 +154,10 @@ func (e *Engine) recordDeliveryAttempt(id string, attempt audit.DeliveryAttempt)
 
 func (e *Engine) auditEvent(evt event.Event, decision arbiterx.Decision) audit.Event {
 	now := e.now()
+	eventTimeSource := audit.EventTimeSourceInputEvent
 	if evt.Time.IsZero() {
 		evt.Time = now
+		eventTimeSource = audit.EventTimeSourceRecordedClock
 	}
 	id := evt.ID
 	if id == "" {
@@ -178,6 +181,7 @@ func (e *Engine) auditEvent(evt event.Event, decision arbiterx.Decision) audit.E
 	return audit.Event{
 		ID:          id,
 		Time:        now,
+		Clock:       &audit.ClockMetadata{Source: audit.ClockSourceRuntimeEngine, RecordedAt: now, EventTimeSource: eventTimeSource},
 		Subject:     evt.Subject,
 		InputEvent:  evt,
 		Policy:      policyID,

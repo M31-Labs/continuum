@@ -40,11 +40,41 @@ func TestEngineDecideEventWritesAudit(t *testing.T) {
 	if record.Capability != "kernel.file.open.deny" || record.Enforcement != "observe" {
 		t.Fatalf("route = capability %s enforcement %s", record.Capability, record.Enforcement)
 	}
+	if record.Clock == nil || record.Clock.Source != audit.ClockSourceRuntimeEngine || record.Clock.EventTimeSource != audit.EventTimeSourceRecordedClock || !record.Clock.RecordedAt.Equal(record.Time) {
+		t.Fatalf("clock = %+v time=%s", record.Clock, record.Time)
+	}
+	if !record.InputEvent.Time.Equal(record.Time) {
+		t.Fatalf("input event time = %s, want audit time %s", record.InputEvent.Time, record.Time)
+	}
 	if len(sink.events) != 1 {
 		t.Fatalf("audit writes = %d", len(sink.events))
 	}
 	if len(sink.events[0].Delivery) != 1 || sink.events[0].Delivery[0].Status != "delivered" {
 		t.Fatalf("delivery = %+v", sink.events[0].Delivery)
+	}
+}
+
+func TestEngineRecordsInputEventClockSource(t *testing.T) {
+	bundle, err := arbiterx.CompileFile(filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"))
+	if err != nil {
+		t.Fatalf("CompileFile: %v", err)
+	}
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	eventTime := now.Add(-time.Minute)
+	engine := NewEngine(bundle, audit.NopSink{})
+	engine.Now = func() time.Time { return now }
+	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
+	evt := event.NewFileAccess(subj, "/repo/main.go", "write")
+	evt.Time = eventTime
+	record, _, err := engine.DecideEvent(context.Background(), evt)
+	if err != nil {
+		t.Fatalf("DecideEvent: %v", err)
+	}
+	if record.Clock == nil || record.Clock.EventTimeSource != audit.EventTimeSourceInputEvent {
+		t.Fatalf("clock = %+v", record.Clock)
+	}
+	if !record.InputEvent.Time.Equal(eventTime) || !record.Time.Equal(now) {
+		t.Fatalf("times input=%s audit=%s", record.InputEvent.Time, record.Time)
 	}
 }
 
