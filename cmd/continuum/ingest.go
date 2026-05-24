@@ -77,18 +77,8 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		result, err := cruntime.NewClient(*daemonURL).Ingest(context.Background(), data, cruntime.ClientIngestOptions{
-			PolicyPath:              resolvedPolicy,
-			PolicyStore:             *policyStorePath,
-			SessionStore:            *sessionPath,
-			GrantStore:              *grantPath,
-			DeliveryStore:           *deliveryPath,
-			IDStore:                 *idStorePath,
-			AuditPath:               *auditPath,
-			AuthToken:               *daemonToken,
-			AirlockPolicy:           *airlockPolicyPath,
-			AirlockStore:            *airlockStorePath,
-			AirlockAccumulatorStore: *airlockAccumulatorStorePath,
-			NoAirlock:               *noAirlock,
+			AuthToken: *daemonToken,
+			NoAirlock: *noAirlock,
 		})
 		if err != nil {
 			return err

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -923,6 +925,35 @@ func TestRunCommandRedactsEnvironmentAssignments(t *testing.T) {
 	}
 }
 
+func TestBuildCommandEnvironmentCleanEnv(t *testing.T) {
+	env, err := buildCommandEnvironment(
+		[]string{
+			"PATH=/bin",
+			"HOME=/home/draco",
+			"TERM=xterm",
+			"AWS_SECRET_ACCESS_KEY=secret",
+		},
+		true,
+		[]string{"FOO=bar", "PATH=/usr/bin"},
+		[]string{"CONTINUUM_SESSION=s1"},
+	)
+	if err != nil {
+		t.Fatalf("buildCommandEnvironment: %v", err)
+	}
+	joined := strings.Join(env, "\n")
+	for _, want := range []string{"PATH=/usr/bin", "HOME=/home/draco", "TERM=xterm", "FOO=bar", "CONTINUUM_SESSION=s1"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("env missing %s: %+v", want, env)
+		}
+	}
+	if strings.Contains(joined, "AWS_SECRET_ACCESS_KEY") {
+		t.Fatalf("clean environment kept sensitive value: %+v", env)
+	}
+	if _, err := buildCommandEnvironment(nil, true, []string{"BAD-NAME=value"}, nil); err == nil {
+		t.Fatal("invalid environment override was accepted")
+	}
+}
+
 func TestSessionsHeartbeatAndMarkStaleCommands(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.json")
 	now := time.Now().UTC().Add(-time.Hour)
@@ -1551,6 +1582,55 @@ func TestIngestCommandAcceptsHorizonEnvelope(t *testing.T) {
 	}
 	if len(sessions.Sessions) != 1 || sessions.Sessions[0].ProcessTree == nil || sessions.Sessions[0].ProcessTree.RootPID != 777 {
 		t.Fatalf("sessions = %+v", sessions.Sessions)
+	}
+}
+
+func TestIngestDaemonModeDoesNotSendPathOverrides(t *testing.T) {
+	dir := t.TempDir()
+	eventPath := filepath.Join(dir, "event.json")
+	if err := os.WriteFile(eventPath, []byte(`{"kind":"process.exec","fields":{"comm":"go","argv_text":"go test ./...","cwd":"/repo"},"subject":{"session":"s1","agent_name":"claude","repo_root":"/repo"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/ingest" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("authorization"); got != "Bearer secret" {
+			t.Fatalf("authorization = %q", got)
+		}
+		for _, key := range []string{
+			"policy", "policy-store", "session-store", "sessions", "grants",
+			"delivery-store", "id-store", "audit", "airlock-policy",
+			"airlock-store", "airlock-accumulator-store",
+		} {
+			if got := r.URL.Query().Get(key); got != "" {
+				t.Fatalf("daemon ingest sent path override %s=%q", key, got)
+			}
+		}
+		if got := r.URL.Query().Get("no_airlock"); got != "true" {
+			t.Fatalf("no_airlock = %q", got)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"ingested":1,"policy":"daemon-policy","audit":"daemon-audit","records":[]}`))
+	}))
+	defer server.Close()
+	var out, errOut bytes.Buffer
+	if err := run([]string{
+		"ingest",
+		"--daemon", server.URL,
+		"--daemon-token", "secret",
+		"--policy", "../../examples/agent-workdir/policies/main.arb",
+		"--events", eventPath,
+		"--audit", filepath.Join(dir, "audit.jsonl"),
+		"--sessions", filepath.Join(dir, "sessions.json"),
+		"--delivery-store", filepath.Join(dir, "deliveries.json"),
+		"--id-store", filepath.Join(dir, "ids.json"),
+		"--no-airlock",
+	}, &out, &errOut); err != nil {
+		t.Fatalf("ingest daemon: %v\nstderr=%s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "daemon="+server.URL) || !strings.Contains(out.String(), "policy=daemon-policy") {
+		t.Fatalf("daemon ingest output = %q", out.String())
 	}
 }
 

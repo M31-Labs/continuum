@@ -70,3 +70,5 @@ BPF LSM, cgroup/eBPF maps, or another reviewed enforcement implementation.
 - treat policy bundles and Horizon manifests as code
 - review audit logs for sensitive data before sharing them
 - do not claim enforcement until backend-specific tests and review exist
+
+Additional review notes are maintained in `docs/security-review.md`.

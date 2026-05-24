@@ -33,6 +33,9 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 	sessionPath := fs.String("sessions", ".continuum/sessions.json", "session store")
 	idStorePath := fs.String("id-store", defaultIDStorePath, "monotonic id store")
 	approvalFlag := fs.String("approval", "deny", "approval mode: deny, allow, cli")
+	cleanEnv := fs.Bool("clean-env", false, "run child with a minimal inherited environment")
+	var envOverrides repeatStringFlag
+	fs.Var(&envOverrides, "env", "child environment assignment KEY=VALUE; may be repeated or comma-separated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -98,12 +101,16 @@ func runRun(args []string, stdout, stderr io.Writer) error {
 
 	fmt.Fprintf(stdout, "continuum: session=%s subject=agent:%s repo=%s enforcement=observe policy=%s\n", session, *agent, absRepo, resolvedPolicy)
 	cmd := exec.Command(rest[0], rest[1:]...)
-	cmd.Env = append(os.Environ(),
-		"CONTINUUM_SESSION="+session,
-		"CONTINUUM_AGENT="+*agent,
-		"CONTINUUM_REPO="+absRepo,
-		"CONTINUUM_POLICY="+resolvedPolicy,
-	)
+	cmdEnv, err := commandEnvironment(*cleanEnv, envOverrides, []string{
+		"CONTINUUM_SESSION=" + session,
+		"CONTINUUM_AGENT=" + *agent,
+		"CONTINUUM_REPO=" + absRepo,
+		"CONTINUUM_POLICY=" + resolvedPolicy,
+	})
+	if err != nil {
+		return err
+	}
+	cmd.Env = cmdEnv
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -240,6 +247,66 @@ func sensitiveEnvName(name string) bool {
 		}
 	}
 	return false
+}
+
+func commandEnvironment(clean bool, overrides []string, continuum []string) ([]string, error) {
+	return buildCommandEnvironment(os.Environ(), clean, overrides, continuum)
+}
+
+func buildCommandEnvironment(base []string, clean bool, overrides []string, continuum []string) ([]string, error) {
+	env := append([]string(nil), base...)
+	if clean {
+		env = filterMinimalEnvironment(env)
+	}
+	for _, assignment := range overrides {
+		if err := validateEnvAssignment(assignment); err != nil {
+			return nil, err
+		}
+		env = setEnvAssignment(env, assignment)
+	}
+	for _, assignment := range continuum {
+		if err := validateEnvAssignment(assignment); err != nil {
+			return nil, err
+		}
+		env = setEnvAssignment(env, assignment)
+	}
+	return env, nil
+}
+
+func filterMinimalEnvironment(env []string) []string {
+	keep := map[string]bool{
+		"HOME": true, "LANG": true, "LC_ALL": true, "LOGNAME": true,
+		"PATH": true, "SHELL": true, "TEMP": true, "TERM": true,
+		"TMP": true, "TMPDIR": true, "USER": true,
+	}
+	out := env[:0]
+	for _, assignment := range env {
+		name, _, ok := strings.Cut(assignment, "=")
+		if ok && keep[name] {
+			out = append(out, assignment)
+		}
+	}
+	return out
+}
+
+func validateEnvAssignment(assignment string) error {
+	name, _, ok := strings.Cut(assignment, "=")
+	if !ok || name == "" || !isEnvName(name) {
+		return fmt.Errorf("environment override %q must be KEY=VALUE with a valid KEY", assignment)
+	}
+	return nil
+}
+
+func setEnvAssignment(env []string, assignment string) []string {
+	name, _, _ := strings.Cut(assignment, "=")
+	prefix := name + "="
+	for i, existing := range env {
+		if strings.HasPrefix(existing, prefix) {
+			env[i] = assignment
+			return env
+		}
+	}
+	return append(env, assignment)
 }
 
 func printAuditLine(w io.Writer, record audit.Event) {

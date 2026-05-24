@@ -30,10 +30,11 @@ type StatePaths struct {
 }
 
 type HTTPOptions struct {
-	AuthToken           string
-	RequireAuthForReads bool
-	MaxBodyBytes        int64
-	AllowedOrigins      []string
+	AuthToken               string
+	RequireAuthForReads     bool
+	MaxBodyBytes            int64
+	AllowedOrigins          []string
+	AllowPathQueryOverrides bool
 }
 
 func NewHTTPHandler(daemon *Daemon) http.Handler {
@@ -93,7 +94,11 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
-		store, err := LoadSessionStore(queryPath(r, "path", paths.Sessions))
+		path, ok := queryPath(w, r, opts, "path", paths.Sessions)
+		if !ok {
+			return
+		}
+		store, err := LoadSessionStore(path)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -107,7 +112,11 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
-		store, err := capability.LoadGrantStore(queryPath(r, "path", paths.Grants))
+		path, ok := queryPath(w, r, opts, "path", paths.Grants)
+		if !ok {
+			return
+		}
+		store, err := capability.LoadGrantStore(path)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -125,7 +134,11 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
-		store, err := airlock.LoadStore(queryPath(r, "path", paths.Airlock))
+		path, ok := queryPath(w, r, opts, "path", paths.Airlock)
+		if !ok {
+			return
+		}
+		store, err := airlock.LoadStore(path)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -139,7 +152,11 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
-		store, err := LoadDeliveryStore(queryPathAny(r, []string{"path", "delivery-store", "delivery_store"}, paths.Deliveries))
+		path, ok := queryPathAny(w, r, opts, []string{"path", "delivery-store", "delivery_store"}, paths.Deliveries)
+		if !ok {
+			return
+		}
+		store, err := LoadDeliveryStore(path)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -157,7 +174,11 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
-		events, err := audit.ReadJSONL(queryPath(r, "path", paths.Audit))
+		path, ok := queryPath(w, r, opts, "path", paths.Audit)
+		if !ok {
+			return
+		}
+		events, err := audit.ReadJSONL(path)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				writeJSON(w, []audit.Event{})
@@ -196,21 +217,61 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		policyPath, ok := queryPathAny(w, r, opts, []string{"policy", "policy_path"}, paths.PolicyBundle)
+		if !ok {
+			return
+		}
+		policyStore, ok := queryPathAny(w, r, opts, []string{"policy-store", "policy_store"}, paths.PolicyStore)
+		if !ok {
+			return
+		}
+		sessionStore, ok := queryPathAny(w, r, opts, []string{"sessions", "session-store", "session_store"}, paths.Sessions)
+		if !ok {
+			return
+		}
+		grantStore, ok := queryPathAny(w, r, opts, []string{"grants", "grant-store", "grant_store"}, paths.Grants)
+		if !ok {
+			return
+		}
+		deliveryStore, ok := queryPathAny(w, r, opts, []string{"delivery-store", "delivery_store"}, paths.Deliveries)
+		if !ok {
+			return
+		}
+		idStore, ok := queryPathAny(w, r, opts, []string{"id-store", "id_store"}, paths.IDStore)
+		if !ok {
+			return
+		}
+		auditPath, ok := queryPathAny(w, r, opts, []string{"audit", "audit_path"}, paths.Audit)
+		if !ok {
+			return
+		}
+		airlockPolicy, ok := queryPathAny(w, r, opts, []string{"airlock-policy", "airlock_policy"}, paths.AirlockPolicy)
+		if !ok {
+			return
+		}
+		airlockStore, ok := queryPathAny(w, r, opts, []string{"airlock-store", "airlock_store"}, paths.Airlock)
+		if !ok {
+			return
+		}
+		airlockAccumulators, ok := queryPathAny(w, r, opts, []string{"airlock-accumulators", "airlock_accumulators", "airlock-accumulator-store", "airlock_accumulator_store"}, paths.AirlockAccumulators)
+		if !ok {
+			return
+		}
 		result, err := IngestEvents(r.Context(), events, IngestOptions{
-			PolicyPath:    queryPathAny(r, []string{"policy", "policy_path"}, paths.PolicyBundle),
-			PolicyStore:   queryPathAny(r, []string{"policy-store", "policy_store"}, paths.PolicyStore),
-			SessionStore:  queryPathAny(r, []string{"sessions", "session-store", "session_store"}, paths.Sessions),
-			GrantStore:    queryPathAny(r, []string{"grants", "grant-store", "grant_store"}, paths.Grants),
-			DeliveryStore: queryPathAny(r, []string{"delivery-store", "delivery_store"}, paths.Deliveries),
-			IDStore:       queryPathAny(r, []string{"id-store", "id_store"}, paths.IDStore),
-			AuditPath:     queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
+			PolicyPath:    policyPath,
+			PolicyStore:   policyStore,
+			SessionStore:  sessionStore,
+			GrantStore:    grantStore,
+			DeliveryStore: deliveryStore,
+			IDStore:       idStore,
+			AuditPath:     auditPath,
 			Registry:      daemon.Registry,
 			EnableAirlock: !truthy(r.URL.Query().Get("no_airlock")),
 			Airlock: AirlockOptions{
-				PolicyPath:           queryPathAny(r, []string{"airlock-policy", "airlock_policy"}, paths.AirlockPolicy),
-				StorePath:            queryPathAny(r, []string{"airlock-store", "airlock_store"}, paths.Airlock),
-				AccumulatorStorePath: queryPathAny(r, []string{"airlock-accumulators", "airlock_accumulators", "airlock-accumulator-store", "airlock_accumulator_store"}, paths.AirlockAccumulators),
-				AuditPath:            queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
+				PolicyPath:           airlockPolicy,
+				StorePath:            airlockStore,
+				AccumulatorStorePath: airlockAccumulators,
+				AuditPath:            auditPath,
 			},
 		})
 		if err != nil {
@@ -334,20 +395,28 @@ func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	return false
 }
 
-func queryPath(r *http.Request, key, fallback string) string {
+func queryPath(w http.ResponseWriter, r *http.Request, opts HTTPOptions, key, fallback string) (string, bool) {
 	if value := r.URL.Query().Get(key); value != "" {
-		return value
+		if !opts.AllowPathQueryOverrides {
+			writeError(w, http.StatusForbidden, "path query overrides disabled")
+			return "", false
+		}
+		return value, true
 	}
-	return fallback
+	return fallback, true
 }
 
-func queryPathAny(r *http.Request, keys []string, fallback string) string {
+func queryPathAny(w http.ResponseWriter, r *http.Request, opts HTTPOptions, keys []string, fallback string) (string, bool) {
 	for _, key := range keys {
 		if value := r.URL.Query().Get(key); value != "" {
-			return value
+			if !opts.AllowPathQueryOverrides {
+				writeError(w, http.StatusForbidden, "path query overrides disabled")
+				return "", false
+			}
+			return value, true
 		}
 	}
-	return fallback
+	return fallback, true
 }
 
 func queryLimit(r *http.Request) int {

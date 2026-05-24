@@ -233,6 +233,33 @@ func TestHTTPHandlerCORSSafeDefaultAndAllowlist(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlerRejectsPathQueryOverridesByDefault(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "sessions.json")
+	store := &SessionStore{}
+	store.Upsert(Session{ID: "s1", State: SessionRunning, StartedAt: time.Now().UTC()})
+	if err := store.Save(sessionPath); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/sessions?path="+sessionPath, nil)
+	res := httptest.NewRecorder()
+	NewHTTPHandlerWithState(daemon, StatePaths{}).ServeHTTP(res, req)
+	if res.Code != http.StatusForbidden || !strings.Contains(res.Body.String(), "path query overrides disabled") {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/sessions?path="+sessionPath, nil)
+	res = httptest.NewRecorder()
+	NewHTTPHandlerWithStateAndOptions(daemon, StatePaths{}, HTTPOptions{AllowPathQueryOverrides: true}).ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"s1"`) {
+		t.Fatalf("allowed override status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
 	dir := t.TempDir()
 	auditPath := filepath.Join(dir, "audit.jsonl")
@@ -439,13 +466,8 @@ func TestDaemonHTTPIngestPersistsSessionAcrossRestart(t *testing.T) {
 		t.Fatalf("marshal events: %v", err)
 	}
 	result, err := NewClient(server.URL).Ingest(context.Background(), body, ClientIngestOptions{
-		SessionStore:  paths.Sessions,
-		DeliveryStore: paths.Deliveries,
-		IDStore:       paths.IDStore,
-		AuditPath:     paths.Audit,
-		PolicyPath:    paths.PolicyBundle,
-		AuthToken:     "secret",
-		NoAirlock:     true,
+		AuthToken: "secret",
+		NoAirlock: true,
 	})
 	server.Close()
 	if err != nil {

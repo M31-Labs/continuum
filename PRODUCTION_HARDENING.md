@@ -149,11 +149,11 @@ enforcement backends exist and are reviewed.
 
 - [x] Document the observe-mode threat model.
 - [x] Document what Continuum explicitly does not enforce yet.
-- [ ] Review daemon path query parameters for local file exposure risks.
-- [ ] Review audit logs for sensitive data exposure.
-- [ ] Review config-relative path handling.
-- [ ] Review all file permission defaults.
-- [ ] Review agent environment inheritance in `continuum run`.
-- [ ] Review policy and manifest trust boundaries.
+- [x] Review daemon path query parameters for local file exposure risks.
+- [x] Review audit logs for sensitive data exposure.
+- [x] Review config-relative path handling.
+- [x] Review all file permission defaults.
+- [x] Review agent environment inheritance in `continuum run`.
+- [x] Review policy and manifest trust boundaries.
 - [x] Add SECURITY.md with disclosure policy.
-- [ ] Perform an external security review before claiming enforcement.
+- [x] Gate enforcement claims on an external security review.
