@@ -24,6 +24,7 @@ type ClientIngestOptions struct {
 	GrantStore    string
 	DeliveryStore string
 	AuditPath     string
+	AuthToken     string
 	AirlockPolicy string
 	AirlockStore  string
 	NoAirlock     bool
@@ -59,6 +60,9 @@ func (c Client) Ingest(ctx context.Context, data []byte, opts ClientIngestOption
 		return IngestResult{}, err
 	}
 	req.Header.Set("content-type", "application/json")
+	if opts.AuthToken != "" {
+		req.Header.Set("authorization", "Bearer "+opts.AuthToken)
+	}
 	httpClient := c.HTTP
 	if httpClient == nil {
 		httpClient = http.DefaultClient

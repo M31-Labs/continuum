@@ -20,6 +20,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "config path")
 	daemonURL := fs.String("daemon", "", "daemon base URL for remote ingest")
+	daemonToken := fs.String("daemon-token", os.Getenv("CONTINUUM_DAEMON_TOKEN"), "bearer token for daemon ingest")
 	policyPath := fs.String("policy", "", "policy path")
 	policyStorePath := fs.String("policy-store", ".continuum/policies.json", "policy store")
 	eventsPath := fs.String("events", "", "events JSON or JSONL path")
@@ -67,6 +68,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			GrantStore:    *grantPath,
 			DeliveryStore: *deliveryPath,
 			AuditPath:     *auditPath,
+			AuthToken:     *daemonToken,
 			AirlockPolicy: *airlockPolicyPath,
 			AirlockStore:  *airlockStorePath,
 			NoAirlock:     *noAirlock,

@@ -19,6 +19,9 @@ func TestClientIngestPostsBatch(t *testing.T) {
 		if got := r.URL.Query().Get("session-store"); got != "/tmp/sessions.json" {
 			t.Fatalf("session-store query = %q", got)
 		}
+		if got := r.Header.Get("authorization"); got != "Bearer secret" {
+			t.Fatalf("authorization header = %q", got)
+		}
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write([]byte(`{"ingested":1,"policy":"p","audit":"a","records":[]}`))
 	})
@@ -28,6 +31,7 @@ func TestClientIngestPostsBatch(t *testing.T) {
 	result, err := NewClient(server.URL).Ingest(context.Background(), []byte(`{"kind":"process.exec"}`), ClientIngestOptions{
 		DeliveryStore: "/tmp/deliveries.json",
 		SessionStore:  "/tmp/sessions.json",
+		AuthToken:     "secret",
 	})
 	if err != nil {
 		t.Fatalf("Ingest: %v", err)

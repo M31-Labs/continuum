@@ -42,9 +42,9 @@ continuum run --agent claude --repo . -- claude code
 continuum ingest --events testdata/events/file_secret_access.json --approval deny
 continuum sessions list
 continuum sessions show agent-session-42
-continuum agent start --config continuum.toml --listen 127.0.0.1:8787
+continuum agent start --config continuum.toml --listen 8787 --auth-token "$CONTINUUM_DAEMON_TOKEN"
 curl -X POST --data-binary @events.jsonl http://127.0.0.1:8787/ingest
-continuum ingest --daemon http://127.0.0.1:8787 --events events.jsonl
+continuum ingest --daemon http://127.0.0.1:8787 --daemon-token "$CONTINUUM_DAEMON_TOKEN" --events events.jsonl
 continuum capabilities
 continuum grant --session agent-session-42 --capability network.connect --host github.com --port 443 --ttl 20m --reason "fetch dependency"
 continuum grant --session agent-session-42 --capability file.write --path .github/workflows/test.yml --op write --ttl 20m --reason "approve CI edit"
@@ -169,6 +169,11 @@ The local daemon exposes the same path as `POST /ingest` once started with
 `--listen`. The endpoint accepts Continuum event JSON, JSON arrays, JSONL,
 audit JSONL, or Horizon envelopes and returns the audit decisions written for
 the batch.
+
+Daemon HTTP listens on localhost when given a bare port such as `--listen 8787`.
+Set `--auth-token` or `CONTINUUM_DAEMON_TOKEN` to require bearer-token
+authentication for mutating endpoints such as `/ingest`; pass `--auth-reads`
+to require the same token for read endpoints.
 
 ## Status
 

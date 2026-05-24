@@ -92,6 +92,71 @@ func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlerRequiresAuthForMutatingEndpoints(t *testing.T) {
+	dir := t.TempDir()
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithStateAndOptions(daemon, StatePaths{
+		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+		Audit:         filepath.Join(dir, "audit.jsonl"),
+		Airlock:       filepath.Join(dir, "airlock.json"),
+	}, HTTPOptions{AuthToken: "secret"})
+	body := `{"kind":"process.exec","subject":{"session":"agent-42","agent_name":"claude","repo_root":"/repo"},"fields":{"comm":"go","argv_text":"go test ./...","cwd":"/repo"}}`
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader(body)))
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d body=%s", res.Code, res.Body.String())
+	}
+	req := httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader(body))
+	req.Header.Set("authorization", "Bearer secret")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("authenticated status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestHTTPHandlerRejectsUnsupportedIngestContentType(t *testing.T) {
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithState(daemon, StatePaths{})
+	req := httptest.NewRequest(http.MethodPost, "/ingest", strings.NewReader("{}"))
+	req.Header.Set("content-type", "application/octet-stream")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestHTTPHandlerCanRequireAuthForReadEndpoints(t *testing.T) {
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithStateAndOptions(daemon, StatePaths{}, HTTPOptions{
+		AuthToken:           "secret",
+		RequireAuthForReads: true,
+	})
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d body=%s", res.Code, res.Body.String())
+	}
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("X-Continuum-Token", "secret")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("authenticated status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestHTTPHandlerIngestsHorizonEnvelope(t *testing.T) {
 	dir := t.TempDir()
 	daemon := NewDaemon(horizon.DirProvider{Dir: filepath.Join("..", "testdata", "horizon-manifests")})

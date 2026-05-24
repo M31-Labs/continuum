@@ -27,13 +27,13 @@ enforcement backends exist and are reviewed.
 
 ## Daemon Safety
 
-- [ ] Make the daemon listen on localhost by default when HTTP is enabled.
-- [ ] Add token authentication for mutating daemon endpoints.
-- [ ] Add optional token authentication for read endpoints.
-- [ ] Add daemon request and header size limits.
-- [ ] Add HTTP server read, write, idle, and shutdown timeouts.
-- [ ] Add graceful shutdown on SIGINT/SIGTERM.
-- [ ] Reject unsupported content types on ingest.
+- [x] Make the daemon listen on localhost by default when HTTP is enabled.
+- [x] Add token authentication for mutating daemon endpoints.
+- [x] Add optional token authentication for read endpoints.
+- [x] Add daemon request and header size limits.
+- [x] Add HTTP server read, write, idle, and shutdown timeouts.
+- [x] Add graceful shutdown on SIGINT/SIGTERM.
+- [x] Reject unsupported content types on ingest.
 - [ ] Return structured error bodies consistently.
 - [ ] Add per-endpoint method tests.
 - [ ] Add daemon readiness that validates policy, state, and registry.
@@ -52,6 +52,29 @@ enforcement backends exist and are reviewed.
 - [ ] Add warning output for privileged/destructive capabilities.
 - [ ] Add route tests for every built-in outcome.
 - [ ] Add replay gates that compare candidate policy decisions against baseline.
+
+## Horizon Artifact Intake
+
+- [ ] Detect `.hzn` source inputs and route them through Horizon-owned export
+      tooling rather than compiling them inside Continuum.
+- [ ] Accept Horizon exported package directories as capability sources.
+- [ ] Accept already compiled eBPF object references as capability artifact
+      metadata without loading them directly.
+- [ ] Register source/sink/worker capabilities from exported Horizon package
+      metadata.
+- [ ] Preserve BPF object path, program name, section, map names, and event
+      stream names as capability metadata.
+- [ ] Validate artifact file existence and readability during capability load.
+- [ ] Record artifact digests for exported `.bpf.o`, generated bindings, and
+      manifest files.
+- [ ] Add `continuum capabilities inspect <path>` for `.hzn`, `.cap.json`,
+      exported package dirs, and compiled artifact manifests.
+- [ ] Add clear diagnostics when a `.hzn` file requires Horizon export first.
+- [ ] Document the boundary: Continuum consumes declarations and streams;
+      Horizon authors, compiles, loads, and transports eBPF.
+- [ ] Add fixtures for `.hzn`, exported package directory, and compiled object
+      reference manifests.
+- [ ] Add tests that artifact intake never grants raw kernel handles to policy.
 
 ## Grant And Approval Hardening
 

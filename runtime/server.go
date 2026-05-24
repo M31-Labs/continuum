@@ -1,12 +1,14 @@
 package runtime
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"m31labs.dev/continuum/airlock"
@@ -25,21 +27,40 @@ type StatePaths struct {
 	Audit         string
 }
 
+type HTTPOptions struct {
+	AuthToken           string
+	RequireAuthForReads bool
+	MaxBodyBytes        int64
+}
+
 func NewHTTPHandler(daemon *Daemon) http.Handler {
 	return NewHTTPHandlerWithState(daemon, StatePaths{})
 }
 
 func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
+	return NewHTTPHandlerWithStateAndOptions(daemon, paths, HTTPOptions{})
+}
+
+func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HTTPOptions) http.Handler {
 	paths = paths.withDefaults()
+	if opts.MaxBodyBytes <= 0 {
+		opts.MaxBodyBytes = 32 << 20
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if !requireGET(w, r) {
+			return
+		}
+		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
 		writeJSON(w, daemon.Health())
 	})
 	mux.HandleFunc("/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		if !requireGET(w, r) {
+			return
+		}
+		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
 		if daemon == nil || daemon.Registry == nil {
@@ -52,6 +73,9 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 		if !requireGET(w, r) {
 			return
 		}
+		if !authorizeHTTP(w, r, opts, false) {
+			return
+		}
 		store, err := LoadSessionStore(queryPath(r, "path", paths.Sessions))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -61,6 +85,9 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 	})
 	mux.HandleFunc("/grants", func(w http.ResponseWriter, r *http.Request) {
 		if !requireGET(w, r) {
+			return
+		}
+		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
 		store, err := capability.LoadGrantStore(queryPath(r, "path", paths.Grants))
@@ -78,6 +105,9 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 		if !requireGET(w, r) {
 			return
 		}
+		if !authorizeHTTP(w, r, opts, false) {
+			return
+		}
 		store, err := airlock.LoadStore(queryPath(r, "path", paths.Airlock))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -87,6 +117,9 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 	})
 	mux.HandleFunc("/deliveries", func(w http.ResponseWriter, r *http.Request) {
 		if !requireGET(w, r) {
+			return
+		}
+		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
 		store, err := LoadDeliveryStore(queryPathAny(r, []string{"path", "delivery-store", "delivery_store"}, paths.Deliveries))
@@ -102,6 +135,9 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 	})
 	mux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 		if !requireGET(w, r) {
+			return
+		}
+		if !authorizeHTTP(w, r, opts, false) {
 			return
 		}
 		events, err := audit.ReadJSONL(queryPath(r, "path", paths.Audit))
@@ -123,11 +159,18 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		if !authorizeHTTP(w, r, opts, true) {
+			return
+		}
+		if !acceptsIngestContentType(r.Header.Get("content-type")) {
+			writeError(w, http.StatusUnsupportedMediaType, "unsupported content type")
+			return
+		}
 		if daemon == nil || daemon.Registry == nil {
 			writeError(w, http.StatusServiceUnavailable, "daemon not initialized")
 			return
 		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 32<<20))
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, opts.MaxBodyBytes))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -159,6 +202,41 @@ func NewHTTPHandlerWithState(daemon *Daemon, paths StatePaths) http.Handler {
 		writeJSON(w, result)
 	})
 	return mux
+}
+
+func acceptsIngestContentType(value string) bool {
+	if value == "" {
+		return true
+	}
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(value, ";")[0]))
+	switch mediaType {
+	case "application/json", "application/x-ndjson", "application/jsonl", "text/plain":
+		return true
+	default:
+		return false
+	}
+}
+
+func authorizeHTTP(w http.ResponseWriter, r *http.Request, opts HTTPOptions, mutating bool) bool {
+	if opts.AuthToken == "" || (!mutating && !opts.RequireAuthForReads) {
+		return true
+	}
+	if subtle.ConstantTimeCompare([]byte(requestAuthToken(r)), []byte(opts.AuthToken)) == 1 {
+		return true
+	}
+	writeError(w, http.StatusUnauthorized, "unauthorized")
+	return false
+}
+
+func requestAuthToken(r *http.Request) string {
+	if token := r.Header.Get("X-Continuum-Token"); token != "" {
+		return token
+	}
+	header := r.Header.Get("Authorization")
+	if strings.HasPrefix(strings.ToLower(header), "bearer ") {
+		return strings.TrimSpace(header[len("bearer "):])
+	}
+	return ""
 }
 
 func (p StatePaths) withDefaults() StatePaths {
