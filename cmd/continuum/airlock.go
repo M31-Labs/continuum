@@ -28,6 +28,7 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		fs.SetOutput(stderr)
 		configPath := fs.String("config", "continuum.toml", "config path")
 		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		jsonOut := fs.Bool("json", false, "emit JSON")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -40,7 +41,13 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		for _, session := range store.List() {
+		sessions := store.List()
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(sessions)
+		}
+		for _, session := range sessions {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\n", session.ID, session.State, session.Reason)
 		}
 		return nil
@@ -206,6 +213,7 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		fs.SetOutput(stderr)
 		configPath := fs.String("config", "continuum.toml", "config path")
 		storePath := fs.String("store", defaultAirlockStorePath, "airlock state store")
+		jsonOut := fs.Bool("json", false, "emit JSON")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -224,6 +232,17 @@ func runAirlock(args []string, stdout, stderr io.Writer) error {
 		session, ok := store.Get(fs.Arg(0))
 		if !ok {
 			return fmt.Errorf("airlock session %q not found", fs.Arg(0))
+		}
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(struct {
+				Session string         `json:"session"`
+				Notes   []airlock.Note `json:"notes"`
+			}{
+				Session: session.ID,
+				Notes:   session.Notes,
+			})
 		}
 		for _, note := range session.Notes {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\n", note.Time.Format(time.RFC3339), note.Operator, note.Text)

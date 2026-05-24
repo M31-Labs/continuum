@@ -25,6 +25,7 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		fs := flag.NewFlagSet("policy check", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		configPath := fs.String("config", "continuum.toml", "config path")
+		jsonOut := fs.Bool("json", false, "write JSON")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -43,6 +44,18 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		report, err := validatePolicy(context.Background(), bundle, cfg.Config)
 		if err != nil {
 			return err
+		}
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(policyCheckReport{
+				Name:   bundle.Name,
+				ID:     bundle.Program.ID,
+				Kind:   bundle.Program.Kind,
+				Path:   fs.Arg(0),
+				Inputs: report.Inputs,
+				Routes: report.Routes,
+			})
 		}
 		fmt.Fprintf(stdout, "policy ok name=%s id=%s kind=%s inputs=%d routes=%d path=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, len(report.Inputs.Fields), len(report.Routes.Routes), fs.Arg(0))
 		return nil
@@ -207,6 +220,15 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 type policyValidationReport struct {
 	Inputs arbiterx.PolicyInputReport
 	Routes cruntime.OutcomeRouteReport
+}
+
+type policyCheckReport struct {
+	Name   string                      `json:"name"`
+	ID     string                      `json:"id"`
+	Kind   string                      `json:"kind"`
+	Path   string                      `json:"path"`
+	Inputs arbiterx.PolicyInputReport  `json:"inputs"`
+	Routes cruntime.OutcomeRouteReport `json:"routes"`
 }
 
 func validatePolicy(ctx context.Context, bundle policy.Bundle, cfg config.Config) (policyValidationReport, error) {

@@ -27,6 +27,7 @@ func runReplay(args []string, stdout, stderr io.Writer) error {
 	baselinePolicyPath := fs.String("baseline-policy", "", "baseline policy path for diff")
 	eventsPath := fs.String("events", "", "events JSON or JSONL path")
 	failOnDiff := fs.Bool("fail-on-diff", false, "exit non-zero when candidate decisions differ from baseline")
+	jsonOut := fs.Bool("json", false, "emit JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -75,6 +76,24 @@ func runReplay(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		diffs := creplay.Compare(baseResults, results)
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			if err := enc.Encode(replayDiffReport{
+				Policy:         resolvedPolicy,
+				BaselinePolicy: *baselinePolicyPath,
+				Events:         len(events),
+				Diffs:          diffs,
+				FailOnDiff:     *failOnDiff,
+				Passed:         len(diffs) == 0,
+			}); err != nil {
+				return err
+			}
+			if *failOnDiff && len(diffs) > 0 {
+				return fmt.Errorf("replay gate failed: %d decision diff(s)", len(diffs))
+			}
+			return nil
+		}
 		for _, diff := range diffs {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\n", diff.EventID, diff.Before, diff.After)
 		}
@@ -86,6 +105,15 @@ func runReplay(args []string, stdout, stderr io.Writer) error {
 		}
 		return nil
 	}
+	if *jsonOut {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(replayReport{
+			Policy:  resolvedPolicy,
+			Events:  len(events),
+			Results: results,
+		})
+	}
 	for _, result := range results {
 		if result.Decision.Selected == nil {
 			continue
@@ -93,6 +121,21 @@ func runReplay(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "%s\t%s\t%s\n", result.Event.ID, result.Decision.Selected.Decision(), result.Decision.Selected.Reason())
 	}
 	return nil
+}
+
+type replayReport struct {
+	Policy  string           `json:"policy"`
+	Events  int              `json:"events"`
+	Results []creplay.Result `json:"results"`
+}
+
+type replayDiffReport struct {
+	Policy         string         `json:"policy"`
+	BaselinePolicy string         `json:"baseline_policy"`
+	Events         int            `json:"events"`
+	Diffs          []creplay.Diff `json:"diffs"`
+	FailOnDiff     bool           `json:"fail_on_diff"`
+	Passed         bool           `json:"passed"`
 }
 
 func loadEvents(path string) ([]event.Event, error) {

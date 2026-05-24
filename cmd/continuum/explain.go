@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"io"
 
@@ -12,6 +13,7 @@ func runExplain(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	path := fs.String("path", ".continuum/audit.jsonl", "audit JSONL path")
+	jsonOut := fs.Bool("json", false, "emit JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -22,6 +24,12 @@ func runExplain(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	explain.Render(stdout, explain.FromAudit(evt))
+	exp := explain.FromAudit(evt)
+	if *jsonOut {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(exp)
+	}
+	explain.Render(stdout, exp)
 	return nil
 }

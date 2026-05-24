@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -256,6 +257,7 @@ func runGrantList(args []string, stdout, stderr io.Writer) error {
 	configPath := fs.String("config", "continuum.toml", "config path")
 	storePath := fs.String("store", defaultGrantStorePath, "grant store")
 	all := fs.Bool("all", false, "include inactive grants")
+	jsonOut := fs.Bool("json", false, "emit JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -272,16 +274,38 @@ func runGrantList(args []string, stdout, stderr io.Writer) error {
 	if *all {
 		grants = store.Grants
 	}
-	for _, grant := range grants {
-		state := "active"
-		if !grant.RevokedAt.IsZero() {
-			state = "revoked"
-		} else if grant.Expired(time.Now().UTC()) {
-			state = "expired"
+	now := time.Now().UTC()
+	if *jsonOut {
+		items := make([]grantListItem, 0, len(grants))
+		for _, grant := range grants {
+			items = append(items, grantListItem{
+				Grant: grant,
+				State: grantState(grant, now),
+			})
 		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\n", grant.ID, grant.Session, grant.Capability, state, grant.ExpiresAt.Format(time.RFC3339))
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(items)
+	}
+	for _, grant := range grants {
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\n", grant.ID, grant.Session, grant.Capability, grantState(grant, now), grant.ExpiresAt.Format(time.RFC3339))
 	}
 	return nil
+}
+
+type grantListItem struct {
+	capability.Grant
+	State string `json:"state"`
+}
+
+func grantState(grant capability.Grant, now time.Time) string {
+	if !grant.RevokedAt.IsZero() {
+		return "revoked"
+	}
+	if grant.Expired(now) {
+		return "expired"
+	}
+	return "active"
 }
 
 func runGrantRenew(args []string, stdout, stderr io.Writer) error {

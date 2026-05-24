@@ -326,6 +326,18 @@ func TestPolicyCheckCommand(t *testing.T) {
 	if !strings.Contains(out.String(), "policy ok") || !strings.Contains(out.String(), "kind=agent-workdir") || !strings.Contains(out.String(), "inputs=") || !strings.Contains(out.String(), "routes=") {
 		t.Fatalf("check output = %q", out.String())
 	}
+	out.Reset()
+	err = run([]string{"policy", "check", "--json", "../../examples/agent-workdir/policies/main.arb"}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("policy check json: %v", err)
+	}
+	var report policyCheckReport
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("decode policy check json: %v\n%s", err, out.String())
+	}
+	if report.Kind != "agent-workdir" || len(report.Inputs.Fields) == 0 || len(report.Routes.Routes) == 0 {
+		t.Fatalf("policy check json = %+v", report)
+	}
 }
 
 func TestPolicyCheckRejectsUnsupportedOutcomeRoute(t *testing.T) {
@@ -666,6 +678,79 @@ func TestReplayDiffCommand(t *testing.T) {
 	if !strings.Contains(out.String(), "evt_secret") || !strings.Contains(out.String(), "audit") || !strings.Contains(out.String(), "deny") {
 		t.Fatalf("diff output = %q", out.String())
 	}
+	out.Reset()
+	err = run([]string{
+		"replay",
+		"--baseline-policy", "../../examples/airlock/policies/main.arb",
+		"--policy", "../../examples/agent-workdir/policies/main.arb",
+		"--events", "../../testdata/events/file_secret_access.json",
+		"--json",
+	}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("replay diff json: %v", err)
+	}
+	var report replayDiffReport
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("decode replay diff json: %v\n%s", err, out.String())
+	}
+	if report.Events != 1 || report.Passed || len(report.Diffs) != 1 || report.Diffs[0].EventID != "evt_secret" {
+		t.Fatalf("replay diff json = %+v", report)
+	}
+}
+
+func TestReplayCommandJSON(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if err := run([]string{
+		"replay",
+		"--policy", "../../examples/agent-workdir/policies/main.arb",
+		"--events", "../../testdata/events/file_secret_access.json",
+		"--json",
+	}, &out, &errOut); err != nil {
+		t.Fatalf("replay json: %v\nstderr=%s", err, errOut.String())
+	}
+	var report replayReport
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("decode replay json: %v\n%s", err, out.String())
+	}
+	if report.Events != 1 || len(report.Results) != 1 || report.Results[0].Decision.Selected == nil || report.Results[0].Decision.Selected.Decision() != "deny" {
+		t.Fatalf("replay json = %+v", report)
+	}
+}
+
+func TestExplainCommandJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	evt := audit.Event{
+		ID:       "evt_explain",
+		Decision: "deny",
+		Reason:   "agent cannot access host credential material",
+		Outcome: arbiterx.NewOutcome(arbiterx.OutcomeDeny, "DenyHostSecrets", map[string]any{
+			"reason": "agent cannot access host credential material",
+		}),
+		Arbitraces: []arbiterx.Step{{Rule: "DenyHostSecrets", Result: "matched"}},
+	}
+	data, err := json.Marshal(evt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if err := run([]string{"explain", "--path", path, "--json", "evt_explain"}, &out, &errOut); err != nil {
+		t.Fatalf("explain json: %v\nstderr=%s", err, errOut.String())
+	}
+	var exp struct {
+		EventID  string          `json:"event_id"`
+		Decision string          `json:"decision"`
+		Reason   string          `json:"reason"`
+		Trace    []arbiterx.Step `json:"trace"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &exp); err != nil {
+		t.Fatalf("decode explain json: %v\n%s", err, out.String())
+	}
+	if exp.EventID != "evt_explain" || exp.Decision != "deny" || len(exp.Trace) != 1 {
+		t.Fatalf("explain json = %+v", exp)
+	}
 }
 
 func TestReplayGateFailsOnDecisionDiff(t *testing.T) {
@@ -906,6 +991,23 @@ func TestGrantCommandPersistsAndLists(t *testing.T) {
 	if !strings.Contains(out.String(), "network.connect") {
 		t.Fatalf("grant list output = %q", out.String())
 	}
+	out.Reset()
+	if err := run([]string{"grant", "list", "--store", store, "--json"}, &out, &errOut); err != nil {
+		t.Fatalf("grant list json: %v", err)
+	}
+	var grants []struct {
+		ID         string         `json:"id"`
+		Session    string         `json:"session"`
+		Capability string         `json:"capability"`
+		State      string         `json:"state"`
+		Scope      map[string]any `json:"scope"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &grants); err != nil {
+		t.Fatalf("decode grant list json: %v\n%s", err, out.String())
+	}
+	if len(grants) != 1 || grants[0].Session != "agent-session-42" || grants[0].Capability != "network.connect" || grants[0].State != "active" {
+		t.Fatalf("grant list json = %+v", grants)
+	}
 }
 
 func TestGrantRenewCommandExtendsGrant(t *testing.T) {
@@ -1057,6 +1159,17 @@ func TestAirlockCommandPersistsState(t *testing.T) {
 	if !strings.Contains(out.String(), "airlocked") {
 		t.Fatalf("status output = %q", out.String())
 	}
+	out.Reset()
+	if err := run([]string{"airlock", "status", "--store", store, "--json"}, &out, &errOut); err != nil {
+		t.Fatalf("airlock status json: %v", err)
+	}
+	var sessions []airlock.Session
+	if err := json.Unmarshal(out.Bytes(), &sessions); err != nil {
+		t.Fatalf("decode airlock status json: %v\n%s", err, out.String())
+	}
+	if len(sessions) != 1 || sessions[0].State != airlock.StateAirlocked {
+		t.Fatalf("airlock status json = %+v", sessions)
+	}
 }
 
 func TestAirlockReleaseAndRemediateWriteAuditEvents(t *testing.T) {
@@ -1126,6 +1239,20 @@ func TestAirlockNoteCommandPersistsAndListsNotes(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "oscar") || !strings.Contains(out.String(), "reviewed containment state") {
 		t.Fatalf("notes output = %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"airlock", "notes", "--store", store, "--json", session}, &out, &errOut); err != nil {
+		t.Fatalf("airlock notes json: %v\nstderr=%s", err, errOut.String())
+	}
+	var notes struct {
+		Session string         `json:"session"`
+		Notes   []airlock.Note `json:"notes"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &notes); err != nil {
+		t.Fatalf("decode airlock notes json: %v\n%s", err, out.String())
+	}
+	if notes.Session != session || len(notes.Notes) != 1 || notes.Notes[0].Operator != "oscar" {
+		t.Fatalf("airlock notes json = %+v", notes)
 	}
 	if err := run([]string{"airlock", "note", "--store", store, "--text", "   ", session}, &out, &errOut); err == nil {
 		t.Fatal("airlock note accepted empty text")

@@ -123,7 +123,7 @@ enforcement backends exist and are reviewed.
 
 - [x] Add `continuum doctor` for config, paths, policies, and permissions.
 - [x] Add `continuum version` with commit and build metadata.
-- [ ] Add structured JSON output for every inspection command.
+- [x] Add structured JSON output for every inspection command.
 - [x] Add clear public README status badges and safety boundary language.
 - [x] Add quickstart for observe-mode production pilot.
 - [x] Add systemd unit example.
