@@ -205,6 +205,42 @@ func TestSessionStoreCreatesObservedSessionFromProcessEvent(t *testing.T) {
 	}
 }
 
+func TestSessionStoreMergesSubjectIdentityFromLifecycleEvents(t *testing.T) {
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	store := &SessionStore{}
+	store.Upsert(Session{
+		ID:        "agent-session-merge",
+		Subject:   subject.Subject{Kind: string(subject.KindAgent), Session: "agent-session-merge", AgentName: "claude"},
+		State:     SessionRunning,
+		StartedAt: now,
+	})
+	evt := event.NewProcessExec(subject.Subject{
+		Kind:     string(subject.KindProcess),
+		Session:  "agent-session-merge",
+		Cgroup:   "/user.slice/agent.scope",
+		RepoRoot: "/src/app",
+	}, map[string]any{
+		"pid":       321,
+		"comm":      "bash",
+		"argv_text": "bash",
+		"cwd":       "/src/app",
+	})
+	evt.Time = now.Add(time.Second)
+	session, changed, err := store.TrackProcessEvent(evt, now.Add(time.Second))
+	if err != nil {
+		t.Fatalf("TrackProcessEvent: %v", err)
+	}
+	if !changed {
+		t.Fatal("TrackProcessEvent did not report process exec")
+	}
+	if session.Subject.Kind != string(subject.KindAgent) || session.Subject.AgentName != "claude" || session.Subject.Session != "agent-session-merge" {
+		t.Fatalf("primary/session identity changed: %+v", session.Subject)
+	}
+	if session.Subject.PID != 321 || session.Subject.Cgroup != "/user.slice/agent.scope" || session.Subject.RepoRoot != "/src/app" {
+		t.Fatalf("process, cgroup, and repo identity were not merged: %+v", session.Subject)
+	}
+}
+
 func findProcess(t *testing.T, tree *ProcessTree, pid int) ProcessRecord {
 	t.Helper()
 	if tree == nil {

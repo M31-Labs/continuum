@@ -29,6 +29,41 @@ func IdentityFromSubject(s Subject) *Identity {
 	}
 }
 
+func Merge(base, incoming Subject) Subject {
+	if base.Empty() {
+		return incoming
+	}
+	if incoming.Empty() {
+		return base
+	}
+	out := base
+	if out.Kind == "" {
+		out.Kind = incoming.Kind
+	}
+	if out.ID == "" {
+		out.ID = incoming.ID
+	}
+	if out.Session == "" {
+		out.Session = incoming.Session
+	}
+	if out.PID == 0 {
+		out.PID = incoming.PID
+	}
+	if out.Cgroup == "" {
+		out.Cgroup = incoming.Cgroup
+	}
+	if out.RepoRoot == "" {
+		out.RepoRoot = incoming.RepoRoot
+	}
+	if out.AgentName == "" {
+		out.AgentName = incoming.AgentName
+	}
+	if out.Task == "" {
+		out.Task = incoming.Task
+	}
+	return out
+}
+
 func SameSession(a, b Subject) bool {
 	return a.Session != "" && a.Session == b.Session
 }

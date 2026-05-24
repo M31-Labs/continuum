@@ -152,9 +152,7 @@ func (s *SessionStore) TrackProcessEvent(evt event.Event, now time.Time) (Sessio
 		index = len(s.Sessions) - 1
 	}
 	session := &s.Sessions[index]
-	if session.Subject.Empty() {
-		session.Subject = evt.Subject
-	}
+	session.Subject = subject.Merge(session.Subject, evt.Subject)
 	if session.StartedAt.IsZero() {
 		session.StartedAt = processEventTime(evt, now)
 	}
