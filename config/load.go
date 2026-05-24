@@ -144,6 +144,13 @@ func assign(cfg *Config, section, key, value string) error {
 		default:
 			return unknown(section, key)
 		}
+	case "daemon":
+		switch key {
+		case "cors_origins":
+			cfg.Daemon.CORSOrigins = value
+		default:
+			return unknown(section, key)
+		}
 	case "enforcement":
 		switch key {
 		case "network":

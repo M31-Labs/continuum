@@ -36,9 +36,9 @@ enforcement backends exist and are reviewed.
 - [x] Reject unsupported content types on ingest.
 - [x] Return structured error bodies consistently.
 - [x] Add per-endpoint method tests.
-- [ ] Add daemon readiness that validates policy, state, and registry.
-- [ ] Add Unix socket serving mode for local-only deployments.
-- [ ] Add config-driven CORS denial/allowlist, default deny.
+- [x] Add daemon readiness that validates policy, state, and registry.
+- [x] Add Unix socket serving mode for local-only deployments.
+- [x] Add config-driven CORS denial/allowlist, default deny.
 
 ## Policy And Capability Safety
 

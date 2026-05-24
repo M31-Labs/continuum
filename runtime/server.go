@@ -31,6 +31,7 @@ type HTTPOptions struct {
 	AuthToken           string
 	RequireAuthForReads bool
 	MaxBodyBytes        int64
+	AllowedOrigins      []string
 }
 
 func NewHTTPHandler(daemon *Daemon) http.Handler {
@@ -55,6 +56,20 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 			return
 		}
 		writeJSON(w, daemon.Health())
+	})
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if !authorizeHTTP(w, r, opts, false) {
+			return
+		}
+		status := CheckReadiness(daemon, paths)
+		if !status.Ready {
+			writeJSONStatus(w, http.StatusServiceUnavailable, status)
+			return
+		}
+		writeJSON(w, status)
 	})
 	mux.HandleFunc("/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
@@ -200,7 +215,12 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 		}
 		writeJSON(w, result)
 	})
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !applyCORS(w, r, opts) {
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func acceptsIngestContentType(value string) bool {
@@ -236,6 +256,36 @@ func requestAuthToken(r *http.Request) string {
 		return strings.TrimSpace(header[len("bearer "):])
 	}
 	return ""
+}
+
+func applyCORS(w http.ResponseWriter, r *http.Request, opts HTTPOptions) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	if !originAllowed(origin, opts.AllowedOrigins) {
+		writeError(w, http.StatusForbidden, "cors origin denied")
+		return false
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Vary", "Origin")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Continuum-Token")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return false
+	}
+	return true
+}
+
+func originAllowed(origin string, allowed []string) bool {
+	for _, candidate := range allowed {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" || candidate == origin {
+			return true
+		}
+	}
+	return false
 }
 
 func (p StatePaths) withDefaults() StatePaths {
@@ -312,7 +362,14 @@ func truthy(value string) bool {
 }
 
 func writeJSON(w http.ResponseWriter, value any) {
+	writeJSONStatus(w, http.StatusOK, value)
+}
+
+func writeJSONStatus(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("content-type", "application/json")
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(value)

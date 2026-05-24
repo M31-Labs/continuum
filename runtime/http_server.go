@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -49,12 +50,37 @@ func ListenAndServe(addr string, handler http.Handler) error {
 }
 
 func ServeHTTP(ctx context.Context, server *http.Server, shutdownTimeout time.Duration) error {
+	ln, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		return err
+	}
+	return ServeHTTPOnListener(ctx, server, ln, shutdownTimeout)
+}
+
+func ServeUnix(ctx context.Context, socketPath string, handler http.Handler, shutdownTimeout time.Duration) error {
+	if socketPath == "" {
+		return errors.New("unix socket path is required")
+	}
+	_ = os.Remove(socketPath)
+	ln, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(socketPath)
+	if err := os.Chmod(socketPath, 0600); err != nil {
+		_ = ln.Close()
+		return err
+	}
+	return ServeHTTPOnListener(ctx, NewHTTPServer("", handler, HTTPServerOptions{}), ln, shutdownTimeout)
+}
+
+func ServeHTTPOnListener(ctx context.Context, server *http.Server, ln net.Listener, shutdownTimeout time.Duration) error {
 	if shutdownTimeout == 0 {
 		shutdownTimeout = 10 * time.Second
 	}
 	errc := make(chan error, 1)
 	go func() {
-		errc <- server.ListenAndServe()
+		errc <- server.Serve(ln)
 	}()
 	select {
 	case err := <-errc:

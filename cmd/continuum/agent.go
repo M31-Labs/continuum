@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,8 +26,10 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 		fs.SetOutput(stderr)
 		configPath := fs.String("config", "continuum.toml", "config path")
 		listen := fs.String("listen", "", "serve health and capabilities over HTTP")
+		unixSocket := fs.String("unix-socket", "", "serve daemon HTTP over a local Unix socket")
 		authToken := fs.String("auth-token", os.Getenv("CONTINUUM_DAEMON_TOKEN"), "bearer token for mutating daemon endpoints")
 		authReads := fs.Bool("auth-reads", false, "require daemon auth for read endpoints too")
+		corsOrigins := fs.String("cors-origins", "", "comma-separated CORS origin allowlist")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -35,6 +38,10 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		cfg = config.Resolve(cfg, *configPath)
+		allowedOrigins := splitCSV(cfg.Daemon.CORSOrigins)
+		if *corsOrigins != "" {
+			allowedOrigins = splitCSV(*corsOrigins)
+		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		daemon := cruntime.NewDaemon(horizon.DirProvider{Dir: cfg.Capabilities.HorizonManifestDir})
@@ -44,9 +51,7 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 		health := daemon.Health()
 		fmt.Fprintf(stdout, "continuum-agent: started project=%s capabilities=%d enforcement=file:%s network:%s process:%s\n",
 			cfg.Project.Name, health.Capabilities, cfg.Enforcement.File, cfg.Enforcement.Network, cfg.Enforcement.Process)
-		if *listen != "" {
-			listenAddr := cruntime.NormalizeListenAddress(*listen)
-			fmt.Fprintf(stdout, "continuum-agent: listening %s\n", listenAddr)
+		if *listen != "" || *unixSocket != "" {
 			handler := cruntime.NewHTTPHandlerWithStateAndOptions(daemon, cruntime.StatePaths{
 				PolicyStore:  cfg.State.PolicyStore,
 				PolicyBundle: cfg.Policy.Bundle,
@@ -58,11 +63,29 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 			}, cruntime.HTTPOptions{
 				AuthToken:           *authToken,
 				RequireAuthForReads: *authReads,
+				AllowedOrigins:      allowedOrigins,
 			})
+			if *unixSocket != "" {
+				fmt.Fprintf(stdout, "continuum-agent: listening unix=%s\n", *unixSocket)
+				return cruntime.ServeUnix(ctx, *unixSocket, handler, 10*time.Second)
+			}
+			listenAddr := cruntime.NormalizeListenAddress(*listen)
+			fmt.Fprintf(stdout, "continuum-agent: listening %s\n", listenAddr)
 			return cruntime.ServeHTTP(ctx, cruntime.NewHTTPServer(listenAddr, handler, cruntime.HTTPServerOptions{}), 10*time.Second)
 		}
 		return nil
 	default:
 		return usageError("Usage: continuum agent start --config continuum.toml")
 	}
+}
+
+func splitCSV(value string) []string {
+	var out []string
+	for _, item := range strings.Split(value, ",") {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }

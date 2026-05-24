@@ -53,6 +53,16 @@ func TestLoadRejectsUnsupportedApprovalKind(t *testing.T) {
 	}
 }
 
+func TestLoadDaemonConfig(t *testing.T) {
+	cfg, err := LoadBytes([]byte("[daemon]\ncors_origins = \"https://console.example,https://ops.example\"\n"))
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if cfg.Daemon.CORSOrigins != "https://console.example,https://ops.example" {
+		t.Fatalf("daemon config = %+v", cfg.Daemon)
+	}
+}
+
 func TestResolvePathsRelativeToConfig(t *testing.T) {
 	cfg := Default()
 	resolved := Resolve(cfg, filepath.Join("examples", "agent-workdir", "continuum.toml"))

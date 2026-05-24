@@ -7,6 +7,7 @@ type Config struct {
 	Subject      SubjectConfig      `json:"subject"`
 	Capabilities CapabilitiesConfig `json:"capabilities"`
 	State        StateConfig        `json:"state"`
+	Daemon       DaemonConfig       `json:"daemon"`
 	Enforcement  EnforcementConfig  `json:"enforcement"`
 	Approval     ApprovalConfig     `json:"approval"`
 }
@@ -40,6 +41,10 @@ type StateConfig struct {
 	DeliveryStore string `json:"delivery_store"`
 	SessionStore  string `json:"session_store"`
 	AirlockStore  string `json:"airlock_store"`
+}
+
+type DaemonConfig struct {
+	CORSOrigins string `json:"cors_origins,omitempty"`
 }
 
 type EnforcementConfig struct {

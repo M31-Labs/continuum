@@ -23,6 +23,9 @@ delivery_store = ".continuum/deliveries.json"
 session_store = ".continuum/sessions.json"
 airlock_store = ".continuum/airlock.json"
 
+[daemon]
+cors_origins = ""
+
 [enforcement]
 network = "observe"
 file = "observe"

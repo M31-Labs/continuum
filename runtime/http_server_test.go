@@ -3,6 +3,8 @@ package runtime
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -62,5 +64,42 @@ func TestServeHTTPStopsOnContextCancel(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("server did not stop")
+	}
+}
+
+func TestServeUnixCreatesPrivateSocketAndStops(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	socketPath := filepath.Join(t.TempDir(), "continuum.sock")
+	done := make(chan error, 1)
+	go func() {
+		done <- ServeUnix(ctx, socketPath, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}), time.Second)
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		info, err := os.Stat(socketPath)
+		if err == nil {
+			if got := info.Mode().Perm(); got != 0600 {
+				t.Fatalf("socket mode = %v", got)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("socket was not created: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("ServeUnix: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("unix server did not stop")
+	}
+	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+		t.Fatalf("socket was not removed: %v", err)
 	}
 }

@@ -39,6 +39,42 @@ func TestHTTPHandlerServesHealthAndCapabilities(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlerServesReadiness(t *testing.T) {
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithState(daemon, StatePaths{
+		PolicyBundle: filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+	})
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("ready status = %d body=%s", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), `"ready": true`) || !strings.Contains(res.Body.String(), `"registry"`) {
+		t.Fatalf("ready body = %s", res.Body.String())
+	}
+}
+
+func TestHTTPHandlerReadinessReportsPolicyFailure(t *testing.T) {
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithState(daemon, StatePaths{PolicyBundle: filepath.Join(t.TempDir(), "missing.arb")})
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("ready status = %d body=%s", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), `"ready": false`) || !strings.Contains(res.Body.String(), `"policy"`) {
+		t.Fatalf("ready body = %s", res.Body.String())
+	}
+}
+
 func TestHTTPHandlerReturnsStructuredMethodErrors(t *testing.T) {
 	daemon := NewDaemon(nil)
 	if err := daemon.Start(context.Background()); err != nil {
@@ -50,6 +86,7 @@ func TestHTTPHandlerReturnsStructuredMethodErrors(t *testing.T) {
 		path   string
 	}{
 		{method: http.MethodPost, path: "/healthz"},
+		{method: http.MethodPost, path: "/readyz"},
 		{method: http.MethodPost, path: "/capabilities"},
 		{method: http.MethodPost, path: "/sessions"},
 		{method: http.MethodPost, path: "/grants"},
@@ -67,6 +104,29 @@ func TestHTTPHandlerReturnsStructuredMethodErrors(t *testing.T) {
 		if !strings.Contains(res.Header().Get("content-type"), "application/json") || !strings.Contains(res.Body.String(), `"error"`) {
 			t.Fatalf("%s %s did not return structured error: content-type=%s body=%s", tc.method, tc.path, res.Header().Get("content-type"), res.Body.String())
 		}
+	}
+}
+
+func TestHTTPHandlerCORSSafeDefaultAndAllowlist(t *testing.T) {
+	daemon := NewDaemon(nil)
+	if err := daemon.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	handler := NewHTTPHandlerWithState(daemon, StatePaths{})
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("origin", "https://console.example")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("default CORS status = %d body=%s", res.Code, res.Body.String())
+	}
+	handler = NewHTTPHandlerWithStateAndOptions(daemon, StatePaths{}, HTTPOptions{AllowedOrigins: []string{"https://console.example"}})
+	req = httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("origin", "https://console.example")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || res.Header().Get("Access-Control-Allow-Origin") != "https://console.example" {
+		t.Fatalf("allowlist status = %d origin=%q body=%s", res.Code, res.Header().Get("Access-Control-Allow-Origin"), res.Body.String())
 	}
 }
 

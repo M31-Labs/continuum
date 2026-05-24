@@ -43,6 +43,7 @@ continuum ingest --events testdata/events/file_secret_access.json --approval den
 continuum sessions list
 continuum sessions show agent-session-42
 continuum agent start --config continuum.toml --listen 8787 --auth-token "$CONTINUUM_DAEMON_TOKEN"
+continuum agent start --config continuum.toml --unix-socket .continuum/daemon.sock
 curl -X POST --data-binary @events.jsonl http://127.0.0.1:8787/ingest
 continuum ingest --daemon http://127.0.0.1:8787 --daemon-token "$CONTINUUM_DAEMON_TOKEN" --events events.jsonl
 continuum capabilities
@@ -182,7 +183,10 @@ the batch.
 Daemon HTTP listens on localhost when given a bare port such as `--listen 8787`.
 Set `--auth-token` or `CONTINUUM_DAEMON_TOKEN` to require bearer-token
 authentication for mutating endpoints such as `/ingest`; pass `--auth-reads`
-to require the same token for read endpoints.
+to require the same token for read endpoints. `--unix-socket` serves the same
+HTTP API over a local socket. `/readyz` validates registry, policy, and state
+store readability. CORS is denied by default; set `[daemon] cors_origins` or
+`--cors-origins` to opt into browser origins.
 
 ## Status
 
