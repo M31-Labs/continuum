@@ -85,7 +85,7 @@ enforcement backends exist and are reviewed.
 - [ ] Record approval denials as audit events.
 - [ ] Add revocation delivery retry handling.
 - [x] Add expired-grant pruning to daemon startup.
-- [ ] Add grant scope validation for network host/IP and file path forms.
+- [x] Add grant scope validation for network host/IP and file path forms.
 
 ## Audit Integrity
 

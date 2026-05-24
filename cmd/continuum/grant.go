@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -99,47 +101,32 @@ func configuredMaxGrantTTL(cfg cliConfig) (time.Duration, error) {
 
 func grantScope(host string, port int, path, pathPrefix, op, comm, argvText, argvPrefix string) map[string]any {
 	scope := map[string]any{}
-	if host != "" {
-		scope["host"] = host
-	}
+	addGrantString(scope, "host", host)
 	if port != 0 {
 		scope["port"] = port
 	}
-	if path != "" {
-		scope["path"] = path
-	}
-	if pathPrefix != "" {
-		scope["path_prefix"] = pathPrefix
-	}
-	if op != "" {
-		scope["op"] = op
-	}
-	if comm != "" {
-		scope["comm"] = comm
-	}
-	if argvText != "" {
-		scope["argv_text"] = argvText
-	}
-	if argvPrefix != "" {
-		scope["argv_prefix"] = argvPrefix
-	}
+	addGrantString(scope, "path", path)
+	addGrantString(scope, "path_prefix", pathPrefix)
+	addGrantString(scope, "op", op)
+	addGrantString(scope, "comm", comm)
+	addGrantString(scope, "argv_text", argvText)
+	addGrantString(scope, "argv_prefix", argvPrefix)
 	return scope
+}
+
+func addGrantString(scope map[string]any, key, value string) {
+	value = strings.TrimSpace(value)
+	if value != "" {
+		scope[key] = value
+	}
 }
 
 func validateGrantScope(capName string, scope map[string]any) error {
 	switch capName {
 	case "network.connect", "kernel.network.connect.grant":
-		if _, ok := scope["host"]; !ok {
-			return usageError("network grants require --host")
-		}
+		return validateNetworkGrantScope(scope)
 	case "file.access", "file.read", "file.write", "file.open":
-		if _, ok := scope["path"]; ok {
-			return nil
-		}
-		if _, ok := scope["path_prefix"]; ok {
-			return nil
-		}
-		return usageError("file grants require --path or --path-prefix")
+		return validateFileGrantScope(scope)
 	case "process.exec":
 		if _, ok := scope["comm"]; ok {
 			return nil
@@ -153,6 +140,103 @@ func validateGrantScope(capName string, scope map[string]any) error {
 		return usageError("process grants require --comm, --argv, or --argv-prefix")
 	}
 	return nil
+}
+
+func validateNetworkGrantScope(scope map[string]any) error {
+	host, ok := grantString(scope, "host")
+	if !ok {
+		return usageError("network grants require --host")
+	}
+	if strings.ContainsAny(host, " \t\r\n/\\") {
+		return usageError("network grant --host must be a hostname or IP address without spaces, slashes, or ports")
+	}
+	if _, err := netip.ParseAddr(host); err != nil && !validGrantHostname(host) {
+		return usageError("network grant --host must be a valid hostname or IP address")
+	}
+	if port, ok := grantInt(scope, "port"); ok && (port < 1 || port > 65535) {
+		return usageError("network grant --port must be between 1 and 65535")
+	}
+	return nil
+}
+
+func validGrantHostname(host string) bool {
+	host = strings.TrimSuffix(host, ".")
+	if len(host) == 0 || len(host) > 253 {
+		return false
+	}
+	labels := strings.Split(host, ".")
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 {
+			return false
+		}
+		for i, r := range label {
+			isAlpha := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+			isDigit := r >= '0' && r <= '9'
+			isHyphen := r == '-'
+			if !isAlpha && !isDigit && !isHyphen {
+				return false
+			}
+			if isHyphen && (i == 0 || i == len(label)-1) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validateFileGrantScope(scope map[string]any) error {
+	path, hasPath := grantString(scope, "path")
+	pathPrefix, hasPathPrefix := grantString(scope, "path_prefix")
+	switch {
+	case hasPath && hasPathPrefix:
+		return usageError("file grants accept either --path or --path-prefix, not both")
+	case hasPath:
+		return validateGrantPath("--path", path)
+	case hasPathPrefix:
+		return validateGrantPath("--path-prefix", pathPrefix)
+	default:
+		return usageError("file grants require --path or --path-prefix")
+	}
+}
+
+func validateGrantPath(label, value string) error {
+	if strings.ContainsRune(value, '\x00') {
+		return usageError(label + " cannot contain NUL bytes")
+	}
+	clean := filepath.Clean(value)
+	if clean == "." || clean == "" {
+		return usageError(label + " must identify a concrete path")
+	}
+	if clean == string(filepath.Separator) {
+		return usageError(label + " cannot grant the filesystem root")
+	}
+	return nil
+}
+
+func grantString(scope map[string]any, key string) (string, bool) {
+	value, ok := scope[key].(string)
+	if !ok {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	return value, value != ""
+}
+
+func grantInt(scope map[string]any, key string) (int, bool) {
+	value, ok := scope[key]
+	if !ok {
+		return 0, false
+	}
+	switch v := value.(type) {
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	default:
+		return 0, false
+	}
 }
 
 func runGrantList(args []string, stdout, stderr io.Writer) error {

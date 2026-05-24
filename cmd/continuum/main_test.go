@@ -681,6 +681,21 @@ func TestGrantCommandRejectsTTLAboveConfiguredMax(t *testing.T) {
 	}
 }
 
+func TestGrantCommandRejectsInvalidNetworkScope(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "grants.json")
+	for _, args := range [][]string{
+		{"grant", "--store", store, "--session", "agent-session-42", "--capability", "network.connect", "--host", "bad host", "--reason", "test"},
+		{"grant", "--store", store, "--session", "agent-session-42", "--capability", "network.connect", "--host", "github.com", "--port", "70000", "--reason", "test"},
+		{"grant", "--store", store, "--session", "agent-session-42", "--capability", "network.connect", "--host", "github.com:443", "--reason", "test"},
+	} {
+		var out, errOut bytes.Buffer
+		err := run(args, &out, &errOut)
+		if err == nil {
+			t.Fatalf("grant succeeded for args %v", args)
+		}
+	}
+}
+
 func TestGrantCommandPersistsFileScope(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "grants.json")
 	var out, errOut bytes.Buffer
@@ -698,6 +713,21 @@ func TestGrantCommandPersistsFileScope(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "file.write") {
 		t.Fatalf("grant output = %q", out.String())
+	}
+}
+
+func TestGrantCommandRejectsInvalidFileScope(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "grants.json")
+	for _, args := range [][]string{
+		{"grant", "--store", store, "--session", "agent-session-42", "--capability", "file.write", "--path", ".", "--reason", "test"},
+		{"grant", "--store", store, "--session", "agent-session-42", "--capability", "file.write", "--path-prefix", "/", "--reason", "test"},
+		{"grant", "--store", store, "--session", "agent-session-42", "--capability", "file.write", "--path", "/repo/file", "--path-prefix", "/repo", "--reason", "test"},
+	} {
+		var out, errOut bytes.Buffer
+		err := run(args, &out, &errOut)
+		if err == nil {
+			t.Fatalf("grant succeeded for args %v", args)
+		}
 	}
 }
 
