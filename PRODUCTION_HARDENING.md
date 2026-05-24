@@ -43,14 +43,14 @@ enforcement backends exist and are reviewed.
 ## Policy And Capability Safety
 
 - [x] Validate active policy existence at daemon startup.
-- [ ] Validate policy outcome names against registered route capabilities.
+- [x] Validate policy outcome names against registered route capabilities.
 - [ ] Validate policy input fields against normalized Continuum facts.
 - [ ] Add policy bundle provenance metadata.
 - [ ] Add policy activation rollback.
 - [ ] Add signed capability manifest support.
 - [ ] Add capability manifest digest pinning in config.
 - [x] Add warning output for privileged/destructive capabilities.
-- [ ] Add route tests for every built-in outcome.
+- [x] Add route tests for every built-in outcome.
 - [ ] Add replay gates that compare candidate policy decisions against baseline.
 
 ## Horizon Artifact Intake

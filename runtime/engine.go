@@ -292,15 +292,36 @@ func RouteCandidates(evt event.Event, outcome arbiterx.Outcome) []string {
 			return []string{"continuum.outcome.deny", "observe.audit"}
 		}
 	case arbiterx.OutcomeAskHuman:
-		return []string{"approval.cli.ask", "observe.audit"}
+		return []string{"approval.cli.ask"}
 	case arbiterx.OutcomeGrantNetwork:
-		return []string{"kernel.network.connect.grant", "observe.audit"}
+		return []string{"kernel.network.connect.grant"}
 	case arbiterx.OutcomeKillProcess:
-		return []string{"kernel.process.kill", "observe.audit"}
+		return []string{"kernel.process.kill"}
 	case arbiterx.OutcomeEnterAirlock:
-		return []string{"continuum.airlock.enter", "observe.audit"}
+		return []string{"continuum.airlock.enter"}
 	default:
 		return []string{"observe.audit"}
+	}
+}
+
+func RouteCandidatesForOutcomeName(name string) []string {
+	switch name {
+	case arbiterx.OutcomeAllow:
+		return []string{"kernel.process.exec.allow", "observe.audit"}
+	case arbiterx.OutcomeDeny:
+		return []string{"continuum.outcome.deny", "kernel.file.open.deny", "kernel.network.connect.deny", "kernel.process.exec.deny", "observe.audit"}
+	case arbiterx.OutcomeAskHuman:
+		return []string{"approval.cli.ask"}
+	case arbiterx.OutcomeGrantNetwork:
+		return []string{"kernel.network.connect.grant"}
+	case arbiterx.OutcomeKillProcess:
+		return []string{"kernel.process.kill"}
+	case arbiterx.OutcomeEnterAirlock:
+		return []string{"continuum.airlock.enter"}
+	case arbiterx.OutcomeAudit:
+		return []string{"observe.audit"}
+	default:
+		return nil
 	}
 }
 

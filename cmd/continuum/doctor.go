@@ -126,7 +126,7 @@ func buildDoctorReport(opts doctorOptions) doctorReport {
 	if err != nil {
 		report.add(doctorFail, "policy bundle", fmt.Sprintf("cannot resolve policy bundle: %v", err), "")
 	} else {
-		report.checkPolicy(policyPath)
+		report.checkPolicy(policyPath, cfg.Capabilities.HorizonManifestDir)
 	}
 	report.checkCapabilities(cfg.Capabilities.HorizonManifestDir)
 
@@ -141,7 +141,7 @@ func buildDoctorReport(opts doctorOptions) doctorReport {
 	return report
 }
 
-func (r *doctorReport) checkPolicy(path string) {
+func (r *doctorReport) checkPolicy(path, manifestDir string) {
 	if path == "" {
 		r.add(doctorFail, "policy bundle", "policy bundle path is required", "")
 		return
@@ -156,6 +156,17 @@ func (r *doctorReport) checkPolicy(path string) {
 		return
 	}
 	r.add(doctorOK, "policy bundle", fmt.Sprintf("compiled policy id=%s kind=%s", bundle.ID, bundle.Kind), path)
+	registry, err := loadCapabilityRegistry(context.Background(), manifestDir)
+	if err != nil {
+		r.add(doctorFail, "policy routes", fmt.Sprintf("capability load failed: %v", err), manifestDir)
+		return
+	}
+	routes, err := cruntime.ValidateOutcomeRoutes(bundle, registry)
+	if err != nil {
+		r.add(doctorFail, "policy routes", err.Error(), path)
+		return
+	}
+	r.add(doctorOK, "policy routes", fmt.Sprintf("validated routes=%d", len(routes.Routes)), path)
 }
 
 func (r *doctorReport) checkCapabilities(manifestDir string) {

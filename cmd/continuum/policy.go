@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"m31labs.dev/continuum/policy"
+	cruntime "m31labs.dev/continuum/runtime"
 )
 
 func runPolicy(args []string, stdout, stderr io.Writer) error {
@@ -20,18 +22,27 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 	case "check":
 		fs := flag.NewFlagSet("policy check", flag.ContinueOnError)
 		fs.SetOutput(stderr)
+		configPath := fs.String("config", "continuum.toml", "config path")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 1 {
-			return usageError("Usage: continuum policy check <file.arb>")
+			return usageError("Usage: continuum policy check [--config continuum.toml] <file.arb>")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
 		}
 		name := inferPolicyName(fs.Arg(0))
 		bundle, err := policy.Load(name, fs.Arg(0))
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "policy ok name=%s id=%s kind=%s path=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, fs.Arg(0))
+		routes, err := validatePolicyRoutes(context.Background(), bundle, cfg.Config.Capabilities.HorizonManifestDir)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "policy ok name=%s id=%s kind=%s routes=%d path=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, len(routes.Routes), fs.Arg(0))
 		return nil
 	case "publish":
 		fs := flag.NewFlagSet("policy publish", flag.ContinueOnError)
@@ -54,12 +65,16 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
+		routes, err := validatePolicyRoutes(context.Background(), bundle, cfg.Config.Capabilities.HorizonManifestDir)
+		if err != nil {
+			return err
+		}
 		if err := policy.UpdateStore(*storePath, func(store *policy.Store) error {
 			return store.Publish(bundle, time.Now().UTC())
 		}); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "published policy name=%s id=%s kind=%s path=%s store=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, fs.Arg(0), *storePath)
+		fmt.Fprintf(stdout, "published policy name=%s id=%s kind=%s routes=%d path=%s store=%s\n", bundle.Name, bundle.Program.ID, bundle.Program.Kind, len(routes.Routes), fs.Arg(0), *storePath)
 		return nil
 	case "activate":
 		fs := flag.NewFlagSet("policy activate", flag.ContinueOnError)
@@ -154,6 +169,17 @@ func runPolicy(args []string, stdout, stderr io.Writer) error {
 	default:
 		return usageError("Usage: continuum policy check <file.arb> | publish <file.arb> | activate <name> | list | show <name>")
 	}
+}
+
+func validatePolicyRoutes(ctx context.Context, bundle policy.Bundle, manifestDir string) (cruntime.OutcomeRouteReport, error) {
+	if err := bundle.Validate(); err != nil {
+		return cruntime.OutcomeRouteReport{}, err
+	}
+	registry, err := loadCapabilityRegistry(ctx, manifestDir)
+	if err != nil {
+		return cruntime.OutcomeRouteReport{}, err
+	}
+	return cruntime.ValidateOutcomeRoutes(bundle.Program, registry)
 }
 
 func sortedStoredBundles(store *policy.Store) []policy.StoredBundle {

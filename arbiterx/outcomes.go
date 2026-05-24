@@ -1,5 +1,11 @@
 package arbiterx
 
+import (
+	"slices"
+
+	"github.com/odvcencio/arbiter/ir"
+)
+
 const (
 	OutcomeAllow        = "Allow"
 	OutcomeDeny         = "Deny"
@@ -45,4 +51,37 @@ func (o Outcome) Decision() string {
 	default:
 		return "audit"
 	}
+}
+
+func OutcomeNames(bundle *Bundle) []string {
+	if bundle == nil || bundle.Program == nil || bundle.Program.IR == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	add := func(name string) {
+		if name != "" {
+			seen[name] = true
+		}
+	}
+	program := bundle.Program.IR
+	for _, schema := range program.OutcomeSchemas {
+		add(schema.Name)
+	}
+	for _, rule := range program.Rules {
+		add(rule.Action.Name)
+		if rule.Fallback != nil {
+			add(rule.Fallback.Name)
+		}
+	}
+	for _, rule := range program.Expert {
+		if rule.ActionKind == ir.ExpertEmit {
+			add(rule.Target)
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
 }

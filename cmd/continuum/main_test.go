@@ -326,6 +326,40 @@ func TestPolicyCheckCommand(t *testing.T) {
 	}
 }
 
+func TestPolicyCheckRejectsUnsupportedOutcomeRoute(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unsupported.arb")
+	if err := os.WriteFile(path, []byte(`
+input {
+	file: {
+		path: string
+	}
+}
+
+outcome Quarantine {
+	reason: string
+}
+
+rule Unsupported priority 1 {
+	when {
+		file.path == "/tmp/x"
+	}
+	then Quarantine {
+		reason: "unsupported",
+	}
+}
+`), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var out, errOut bytes.Buffer
+	err := run([]string{"policy", "check", path}, &out, &errOut)
+	if err == nil {
+		t.Fatalf("policy check succeeded: %s", out.String())
+	}
+	if !strings.Contains(err.Error(), "policy outcome route validation failed") || !strings.Contains(err.Error(), "Quarantine") {
+		t.Fatalf("policy check error = %v", err)
+	}
+}
+
 func TestCapabilitiesCommandFiltersKind(t *testing.T) {
 	var out, errOut bytes.Buffer
 	err := run([]string{"capabilities", "--manifest-dir", "../../testdata/horizon-manifests", "--kind", "source"}, &out, &errOut)

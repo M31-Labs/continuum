@@ -27,10 +27,13 @@ func CheckReadiness(daemon *Daemon, paths StatePaths) ReadinessStatus {
 	policyPath, err := ResolvePolicyPath(paths.PolicyBundle, paths.PolicyStore, DefaultPolicyPath)
 	if err != nil {
 		status.add("policy", false, err.Error())
-	} else if _, err := arbiterx.CompileFile(policyPath); err != nil {
+	} else if bundle, err := arbiterx.CompileFile(policyPath); err != nil {
 		status.add("policy", false, err.Error())
+	} else if _, err := ValidateOutcomeRoutes(bundle, daemon.Registry); err != nil {
+		status.add("policy routes", false, err.Error())
 	} else {
 		status.add("policy", true, "")
+		status.add("policy routes", true, "")
 	}
 	if _, err := LoadSessionStore(paths.Sessions); err != nil {
 		status.add("sessions", false, err.Error())
