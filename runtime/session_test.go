@@ -74,6 +74,28 @@ func TestSessionStoreSchemaMigration(t *testing.T) {
 	}
 }
 
+func TestSessionStoreCompactRetainsRunningAndNewestTerminal(t *testing.T) {
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	store := &SessionStore{SchemaVersion: SessionStoreSchemaVersion, Sessions: []Session{
+		{ID: "old", State: SessionExited, StartedAt: now.Add(-4 * time.Hour), EndedAt: now.Add(-3 * time.Hour)},
+		{ID: "new", State: SessionFailed, StartedAt: now.Add(-2 * time.Hour), EndedAt: now.Add(-time.Hour)},
+		{ID: "running", State: SessionRunning, StartedAt: now.Add(-5 * time.Hour), LastHeartbeatAt: now.Add(-5 * time.Hour)},
+	}}
+	report, err := store.Compact(RetentionOptions{Retain: 1, Now: now})
+	if err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if report.Removed != 1 || len(store.Sessions) != 2 {
+		t.Fatalf("report=%+v sessions=%+v", report, store.Sessions)
+	}
+	if _, ok := findSessionForTest(store.Sessions, "running"); !ok {
+		t.Fatalf("running session pruned: %+v", store.Sessions)
+	}
+	if _, ok := findSessionForTest(store.Sessions, "new"); !ok {
+		t.Fatalf("newest terminal session pruned: %+v", store.Sessions)
+	}
+}
+
 func TestSessionStoreHeartbeatAndMarkStale(t *testing.T) {
 	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
 	store := &SessionStore{}
@@ -150,6 +172,15 @@ func TestSessionStoreTracksChildProcessEvents(t *testing.T) {
 	if session.State != SessionRunning {
 		t.Fatalf("child exit changed session state: %+v", session)
 	}
+}
+
+func findSessionForTest(sessions []Session, id string) (Session, bool) {
+	for _, session := range sessions {
+		if session.ID == id {
+			return session, true
+		}
+	}
+	return Session{}, false
 }
 
 func TestSessionStoreCreatesObservedSessionFromProcessEvent(t *testing.T) {

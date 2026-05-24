@@ -9,13 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"m31labs.dev/continuum/audit"
 )
 
 func runAudit(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return usageError("Usage: continuum audit list|show|export|verify [--path audit.jsonl] [id]")
+		return usageError("Usage: continuum audit list|show|export|compact|verify [--path audit.jsonl] [id]")
 	}
 	switch args[0] {
 	case "list":
@@ -95,6 +96,30 @@ func runAudit(args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "exported audit events=%d out=%s redacted=%t\n", len(events), *outPath, opts.Active())
 		return nil
+	case "compact":
+		fs := flag.NewFlagSet("audit compact", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		path := fs.String("path", ".continuum/audit.jsonl", "audit JSONL path")
+		retain := fs.Int("retain", 0, "retain newest audit events")
+		olderThan := fs.Duration("older-than", 0, "remove audit events older than this age")
+		jsonOut := fs.Bool("json", false, "emit JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return usageError("Usage: continuum audit compact [--path audit.jsonl] --retain N [--older-than 720h] [--json]")
+		}
+		report, err := audit.CompactJSONL(*path, audit.CompactOptions{Retain: *retain, OlderThan: *olderThan, Now: time.Now().UTC()})
+		if err != nil {
+			return err
+		}
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(report)
+		}
+		fmt.Fprintf(stdout, "compacted audit before=%d after=%d removed=%d path=%s\n", report.Before, report.After, report.Removed, *path)
+		return nil
 	case "show":
 		fs := flag.NewFlagSet("audit show", flag.ContinueOnError)
 		fs.SetOutput(stderr)
@@ -149,7 +174,7 @@ func runAudit(args []string, stdout, stderr io.Writer) error {
 		}
 		return nil
 	default:
-		return usageError("Usage: continuum audit list|show|export|verify [--path audit.jsonl] [id]")
+		return usageError("Usage: continuum audit list|show|export|compact|verify [--path audit.jsonl] [id]")
 	}
 }
 

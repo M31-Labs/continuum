@@ -13,7 +13,7 @@ import (
 
 func runSessions(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return usageError("Usage: continuum sessions list|show|heartbeat|mark-stale [--store .continuum/sessions.json]")
+		return usageError("Usage: continuum sessions list|show|heartbeat|mark-stale|compact [--store .continuum/sessions.json]")
 	}
 	switch args[0] {
 	case "list":
@@ -144,8 +144,43 @@ func runSessions(args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "stale_sessions=%d after=%s\n", len(stale), after.String())
 		return nil
+	case "compact":
+		fs := flag.NewFlagSet("sessions compact", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		configPath := fs.String("config", "continuum.toml", "config path")
+		storePath := fs.String("store", defaultSessionStorePath, "session store")
+		retain := fs.Int("retain", 0, "retain newest terminal sessions")
+		olderThan := fs.Duration("older-than", 0, "remove terminal sessions older than this age")
+		jsonOut := fs.Bool("json", false, "emit JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return usageError("Usage: continuum sessions compact [--store .continuum/sessions.json] --retain N [--older-than 720h]")
+		}
+		cfg, err := loadConfigOrDefault(*configPath)
+		if err != nil {
+			return err
+		}
+		*storePath = resolveSessionStorePath(*storePath, cfg)
+		opts := cruntime.RetentionOptions{Retain: *retain, OlderThan: *olderThan, Now: time.Now().UTC()}
+		var report cruntime.RetentionReport
+		if err := cruntime.UpdateSessionStore(*storePath, func(sessions *cruntime.SessionStore) error {
+			var err error
+			report, err = sessions.Compact(opts)
+			return err
+		}); err != nil {
+			return err
+		}
+		if *jsonOut {
+			enc := json.NewEncoder(stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(report)
+		}
+		fmt.Fprintf(stdout, "compacted sessions before=%d after=%d removed=%d store=%s\n", report.Before, report.After, report.Removed, *storePath)
+		return nil
 	default:
-		return usageError("Usage: continuum sessions list|show|heartbeat|mark-stale [--store .continuum/sessions.json]")
+		return usageError("Usage: continuum sessions list|show|heartbeat|mark-stale|compact [--store .continuum/sessions.json]")
 	}
 }
 

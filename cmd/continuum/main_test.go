@@ -1294,6 +1294,86 @@ func TestGrantRevokeQueuesDelivery(t *testing.T) {
 	}
 }
 
+func TestStateCompactionCommands(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	var out, errOut bytes.Buffer
+
+	auditPath := filepath.Join(dir, "audit.jsonl")
+	sink, err := audit.NewJSONLSink(auditPath)
+	if err != nil {
+		t.Fatalf("NewJSONLSink: %v", err)
+	}
+	for _, id := range []string{"evt_1", "evt_2"} {
+		if err := sink.Write(context.Background(), audit.Event{ID: id, Time: now, Outcome: arbiterx.NewOutcome(arbiterx.OutcomeAudit, "Audit", map[string]any{"reason": id})}); err != nil {
+			t.Fatalf("audit write %s: %v", id, err)
+		}
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("audit close: %v", err)
+	}
+	if err := run([]string{"audit", "compact", "--path", auditPath, "--retain", "1"}, &out, &errOut); err != nil {
+		t.Fatalf("audit compact: %v\nstderr=%s", err, errOut.String())
+	}
+	events, err := audit.ReadJSONL(auditPath)
+	if err != nil {
+		t.Fatalf("ReadJSONL: %v", err)
+	}
+	if len(events) != 1 || events[0].ID != "evt_2" {
+		t.Fatalf("compacted audit events = %+v", events)
+	}
+
+	sessionPath := filepath.Join(dir, "sessions.json")
+	sessions := &cruntime.SessionStore{Sessions: []cruntime.Session{
+		{ID: "old", State: cruntime.SessionExited, StartedAt: now.Add(-3 * time.Hour), EndedAt: now.Add(-3 * time.Hour)},
+		{ID: "new", State: cruntime.SessionExited, StartedAt: now.Add(-time.Hour), EndedAt: now.Add(-time.Hour)},
+		{ID: "running", State: cruntime.SessionRunning, StartedAt: now.Add(-4 * time.Hour), LastHeartbeatAt: now.Add(-4 * time.Hour)},
+	}}
+	if err := sessions.Save(sessionPath); err != nil {
+		t.Fatalf("sessions Save: %v", err)
+	}
+	out.Reset()
+	if err := run([]string{"sessions", "compact", "--store", sessionPath, "--retain", "1"}, &out, &errOut); err != nil {
+		t.Fatalf("sessions compact: %v\nstderr=%s", err, errOut.String())
+	}
+	reloadedSessions, err := cruntime.LoadSessionStore(sessionPath)
+	if err != nil {
+		t.Fatalf("LoadSessionStore: %v", err)
+	}
+	if len(reloadedSessions.Sessions) != 2 {
+		t.Fatalf("compacted sessions = %+v", reloadedSessions.Sessions)
+	}
+
+	deliveryPath := filepath.Join(dir, "deliveries.json")
+	deliveries, err := cruntime.LoadDeliveryStore(deliveryPath)
+	if err != nil {
+		t.Fatalf("LoadDeliveryStore: %v", err)
+	}
+	for _, item := range []cruntime.DeliveryItem{
+		{ID: "old", AuditID: "evt_old", Capability: "observe.audit", Status: cruntime.DeliveryDelivered, CreatedAt: now.Add(-3 * time.Hour)},
+		{ID: "new", AuditID: "evt_new", Capability: "observe.audit", Status: cruntime.DeliveryDelivered, CreatedAt: now.Add(-time.Hour)},
+		{ID: "pending", AuditID: "evt_pending", Capability: "observe.audit", Status: cruntime.DeliveryPending, CreatedAt: now.Add(-4 * time.Hour)},
+	} {
+		if _, err := deliveries.Enqueue(item); err != nil {
+			t.Fatalf("Enqueue %s: %v", item.ID, err)
+		}
+	}
+	if err := deliveries.Save(); err != nil {
+		t.Fatalf("deliveries Save: %v", err)
+	}
+	out.Reset()
+	if err := run([]string{"delivery", "compact", "--delivery-store", deliveryPath, "--retain", "1"}, &out, &errOut); err != nil {
+		t.Fatalf("delivery compact: %v\nstderr=%s", err, errOut.String())
+	}
+	reloadedDeliveries, err := cruntime.LoadDeliveryStore(deliveryPath)
+	if err != nil {
+		t.Fatalf("reload deliveries: %v", err)
+	}
+	if len(reloadedDeliveries.List()) != 2 || len(reloadedDeliveries.ByStatus(cruntime.DeliveryPending)) != 1 {
+		t.Fatalf("compacted deliveries = %+v", reloadedDeliveries.List())
+	}
+}
+
 func TestAuditListFilters(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audit.jsonl")
 	sink, err := audit.NewJSONLSink(path)

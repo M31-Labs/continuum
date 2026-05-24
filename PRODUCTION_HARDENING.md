@@ -20,7 +20,7 @@ enforcement backends exist and are reviewed.
 - [x] Add tests for audit durability and append behavior.
 - [x] Add cross-process file locking around JSON state mutation.
 - [x] Add corrupt-store recovery diagnostics that preserve the bad file.
-- [ ] Add bounded retention/compaction for delivery, session, and audit state.
+- [x] Add bounded retention/compaction for delivery, session, and audit state.
 - [x] Add state schema versions and migration hooks.
 - [ ] Add explicit state backup/export/import commands.
 - [ ] Add monotonic ID generation that survives process restarts.

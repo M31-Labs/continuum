@@ -54,6 +54,50 @@ func TestJSONLWriteReadFind(t *testing.T) {
 	}
 }
 
+func TestCompactJSONLRechainsKeptEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	sink, err := NewJSONLSink(path)
+	if err != nil {
+		t.Fatalf("NewJSONLSink: %v", err)
+	}
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	for i, id := range []string{"evt_1", "evt_2", "evt_3"} {
+		if err := sink.Write(context.Background(), Event{
+			ID:       id,
+			Time:     now.Add(time.Duration(i) * time.Minute),
+			Outcome:  arbiterx.NewOutcome(arbiterx.OutcomeAudit, "Audit", map[string]any{"reason": id}),
+			Decision: "audit",
+			Reason:   id,
+		}); err != nil {
+			t.Fatalf("Write %s: %v", id, err)
+		}
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	report, err := CompactJSONL(path, CompactOptions{Retain: 2, Now: now.Add(time.Hour)})
+	if err != nil {
+		t.Fatalf("CompactJSONL: %v", err)
+	}
+	if report.Before != 3 || report.After != 2 || report.Removed != 1 {
+		t.Fatalf("report = %+v", report)
+	}
+	events, err := ReadJSONL(path)
+	if err != nil {
+		t.Fatalf("ReadJSONL: %v", err)
+	}
+	if len(events) != 2 || events[0].ID != "evt_2" || events[1].ID != "evt_3" {
+		t.Fatalf("events = %+v", events)
+	}
+	verify, err := VerifyJSONL(path)
+	if err != nil {
+		t.Fatalf("VerifyJSONL: %v", err)
+	}
+	if !verify.OK || verify.Events != 2 {
+		t.Fatalf("verify = %+v", verify)
+	}
+}
+
 func TestJSONLSinkAppendsAndUsesPrivateMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audit.jsonl")
 	for _, id := range []string{"evt_1", "evt_2"} {

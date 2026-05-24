@@ -174,6 +174,31 @@ func (s *DeliveryStore) ByStatus(status DeliveryStatus) []DeliveryItem {
 	return out
 }
 
+func (s *DeliveryStore) Compact(opts RetentionOptions) (RetentionReport, error) {
+	if s == nil {
+		return RetentionReport{}, fmt.Errorf("nil delivery store")
+	}
+	if err := opts.Validate(); err != nil {
+		return RetentionReport{}, err
+	}
+	now := retentionNow(opts)
+	cutoff := now.Add(-opts.OlderThan)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	report := RetentionReport{Before: len(s.Items)}
+	retained := retainedTerminalDeliveryIndexes(s.Items, opts.Retain)
+	kept := s.Items[:0]
+	for i, item := range s.Items {
+		if !terminalDeliveryStatus(item.Status) || retained[i] || !deliveryExpiredForRetention(item, opts, cutoff) {
+			kept = append(kept, item)
+		}
+	}
+	s.Items = kept
+	report.After = len(s.Items)
+	report.Removed = report.Before - report.After
+	return report, nil
+}
+
 func (s *DeliveryStore) nextID(auditID, cap string) string {
 	base := sanitizeDeliveryID(auditID)
 	if base == "" {
@@ -184,6 +209,56 @@ func (s *DeliveryStore) nextID(auditID, cap string) string {
 		base += "_" + capPart
 	}
 	return fmt.Sprintf("dlv_%s_%d", base, len(s.Items)+1)
+}
+
+func retainedTerminalDeliveryIndexes(items []DeliveryItem, retain int) map[int]bool {
+	out := map[int]bool{}
+	if retain <= 0 {
+		return out
+	}
+	indexes := make([]int, 0, len(items))
+	for i, item := range items {
+		if terminalDeliveryStatus(item.Status) {
+			indexes = append(indexes, i)
+		}
+	}
+	slices.SortFunc(indexes, func(a, b int) int {
+		at := deliveryRetentionTime(items[a])
+		bt := deliveryRetentionTime(items[b])
+		if at.Equal(bt) {
+			return strings.Compare(items[b].ID, items[a].ID)
+		}
+		if at.After(bt) {
+			return -1
+		}
+		return 1
+	})
+	for i, index := range indexes {
+		if i >= retain {
+			break
+		}
+		out[index] = true
+	}
+	return out
+}
+
+func terminalDeliveryStatus(status DeliveryStatus) bool {
+	return status == DeliveryDelivered || status == DeliveryFailed
+}
+
+func deliveryExpiredForRetention(item DeliveryItem, opts RetentionOptions, cutoff time.Time) bool {
+	if opts.OlderThan == 0 {
+		return true
+	}
+	t := deliveryRetentionTime(item)
+	return !t.IsZero() && t.Before(cutoff)
+}
+
+func deliveryRetentionTime(item DeliveryItem) time.Time {
+	if !item.UpdatedAt.IsZero() {
+		return item.UpdatedAt
+	}
+	return item.CreatedAt
 }
 
 func sanitizeDeliveryID(value string) string {

@@ -74,6 +74,30 @@ func TestDeliveryStoreSchemaMigration(t *testing.T) {
 	}
 }
 
+func TestDeliveryStoreCompactRetainsPendingAndNewestTerminal(t *testing.T) {
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+	store := &DeliveryStore{SchemaVersion: DeliveryStoreSchemaVersion}
+	for _, item := range []DeliveryItem{
+		{ID: "old", AuditID: "evt_old", Capability: "observe.audit", Status: DeliveryDelivered, CreatedAt: now.Add(-3 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
+		{ID: "new", AuditID: "evt_new", Capability: "observe.audit", Status: DeliveryFailed, CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour)},
+		{ID: "pending", AuditID: "evt_pending", Capability: "observe.audit", Status: DeliveryPending, CreatedAt: now.Add(-4 * time.Hour), UpdatedAt: now.Add(-4 * time.Hour)},
+	} {
+		if _, err := store.Enqueue(item); err != nil {
+			t.Fatalf("Enqueue %s: %v", item.ID, err)
+		}
+	}
+	report, err := store.Compact(RetentionOptions{Retain: 1, Now: now})
+	if err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if report.Removed != 1 || len(store.Items) != 2 {
+		t.Fatalf("report=%+v items=%+v", report, store.Items)
+	}
+	if len(store.ByStatus(DeliveryPending)) != 1 || len(store.ByStatus(DeliveryFailed)) != 1 {
+		t.Fatalf("compacted items = %+v", store.Items)
+	}
+}
+
 func TestRetryGrantRevocationDeliveriesRecordsAttempts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "deliveries.json")
 	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)

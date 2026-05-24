@@ -265,6 +265,30 @@ func (s *SessionStore) MarkStale(now time.Time, maxAge time.Duration) []Session 
 	return stale
 }
 
+func (s *SessionStore) Compact(opts RetentionOptions) (RetentionReport, error) {
+	if s == nil {
+		return RetentionReport{}, fmt.Errorf("nil session store")
+	}
+	if err := opts.Validate(); err != nil {
+		return RetentionReport{}, err
+	}
+	now := retentionNow(opts)
+	cutoff := now.Add(-opts.OlderThan)
+	report := RetentionReport{Before: len(s.Sessions)}
+	retained := retainedTerminalSessionIndexes(s.Sessions, opts.Retain)
+	kept := s.Sessions[:0]
+	for i, session := range s.Sessions {
+		if !terminalSessionState(session.State) || retained[i] || !sessionExpiredForRetention(session, opts, cutoff) {
+			kept = append(kept, session)
+		}
+	}
+	s.Sessions = kept
+	s.sort()
+	report.After = len(s.Sessions)
+	report.Removed = report.Before - report.After
+	return report, nil
+}
+
 func (s *SessionStore) sort() {
 	slices.SortFunc(s.Sessions, func(a, b Session) int {
 		if a.StartedAt.Equal(b.StartedAt) {
@@ -281,6 +305,59 @@ func (s *SessionStore) sort() {
 		}
 		return 1
 	})
+}
+
+func retainedTerminalSessionIndexes(sessions []Session, retain int) map[int]bool {
+	out := map[int]bool{}
+	if retain <= 0 {
+		return out
+	}
+	indexes := make([]int, 0, len(sessions))
+	for i, session := range sessions {
+		if terminalSessionState(session.State) {
+			indexes = append(indexes, i)
+		}
+	}
+	slices.SortFunc(indexes, func(a, b int) int {
+		at := sessionRetentionTime(sessions[a])
+		bt := sessionRetentionTime(sessions[b])
+		if at.Equal(bt) {
+			return strings.Compare(sessions[b].ID, sessions[a].ID)
+		}
+		if at.After(bt) {
+			return -1
+		}
+		return 1
+	})
+	for i, index := range indexes {
+		if i >= retain {
+			break
+		}
+		out[index] = true
+	}
+	return out
+}
+
+func terminalSessionState(state SessionState) bool {
+	return state == SessionExited || state == SessionFailed
+}
+
+func sessionExpiredForRetention(session Session, opts RetentionOptions, cutoff time.Time) bool {
+	if opts.OlderThan == 0 {
+		return true
+	}
+	t := sessionRetentionTime(session)
+	return !t.IsZero() && t.Before(cutoff)
+}
+
+func sessionRetentionTime(session Session) time.Time {
+	if !session.EndedAt.IsZero() {
+		return session.EndedAt
+	}
+	if !session.LastHeartbeatAt.IsZero() {
+		return session.LastHeartbeatAt
+	}
+	return session.StartedAt
 }
 
 func (s *SessionStore) findIndex(id string) int {
