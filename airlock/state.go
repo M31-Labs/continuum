@@ -52,7 +52,7 @@ func validTransition(from, to State) bool {
 		return to == StateNormal || to == StateSuspicious || to == StateContained || to == StateAirlocked
 	}
 	if from == to {
-		return true
+		return knownState(from)
 	}
 	switch from {
 	case StateNormal:
@@ -63,6 +63,15 @@ func validTransition(from, to State) bool {
 		return to == StateAirlocked || to == StateReleased || to == StateRemediated || to == StateDestroyed
 	case StateAirlocked:
 		return to == StateReleased || to == StateRemediated || to == StateDestroyed
+	default:
+		return false
+	}
+}
+
+func knownState(state State) bool {
+	switch state {
+	case StateNormal, StateSuspicious, StateContained, StateAirlocked, StateReleased, StateRemediated, StateDestroyed:
+		return true
 	default:
 		return false
 	}

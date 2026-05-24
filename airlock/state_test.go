@@ -23,6 +23,78 @@ func TestStateTransitions(t *testing.T) {
 	}
 }
 
+func TestStateTransitionValidationCoversDeclaredGraph(t *testing.T) {
+	states := []State{"", StateNormal, StateSuspicious, StateContained, StateAirlocked, StateReleased, StateRemediated, StateDestroyed}
+	legal := map[State]map[State]bool{
+		"": {
+			StateNormal:     true,
+			StateSuspicious: true,
+			StateContained:  true,
+			StateAirlocked:  true,
+		},
+		StateNormal: {
+			StateNormal:     true,
+			StateSuspicious: true,
+			StateContained:  true,
+			StateAirlocked:  true,
+		},
+		StateSuspicious: {
+			StateSuspicious: true,
+			StateContained:  true,
+			StateAirlocked:  true,
+			StateReleased:   true,
+		},
+		StateContained: {
+			StateContained:  true,
+			StateAirlocked:  true,
+			StateReleased:   true,
+			StateRemediated: true,
+			StateDestroyed:  true,
+		},
+		StateAirlocked: {
+			StateAirlocked:  true,
+			StateReleased:   true,
+			StateRemediated: true,
+			StateDestroyed:  true,
+		},
+		StateReleased: {
+			StateReleased: true,
+		},
+		StateRemediated: {
+			StateRemediated: true,
+		},
+		StateDestroyed: {
+			StateDestroyed: true,
+		},
+	}
+	for _, from := range states {
+		for _, to := range states {
+			want := legal[from][to]
+			if got := validTransition(from, to); got != want {
+				t.Fatalf("validTransition(%q, %q) = %v, want %v", from, to, got, want)
+			}
+		}
+	}
+}
+
+func TestStateTransitionValidationRejectsUnknownStates(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		from State
+		to   State
+	}{
+		{name: "unknown self", from: State("unknown"), to: State("unknown")},
+		{name: "unknown source", from: State("unknown"), to: StateAirlocked},
+		{name: "unknown target", from: StateAirlocked, to: State("unknown")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if validTransition(tc.from, tc.to) {
+				t.Fatalf("validTransition(%q, %q) = true, want false", tc.from, tc.to)
+			}
+		})
+	}
+}
+
 func TestLoadBehaviorFixture(t *testing.T) {
 	behavior, err := LoadBehaviorFixture(filepath.Join("..", "testdata", "events", "worm_fanout.json"))
 	if err != nil {
