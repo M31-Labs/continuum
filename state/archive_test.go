@@ -11,6 +11,7 @@ import (
 	"m31labs.dev/continuum/airlock"
 	"m31labs.dev/continuum/audit"
 	"m31labs.dev/continuum/capability"
+	"m31labs.dev/continuum/event"
 	"m31labs.dev/continuum/policy"
 	cruntime "m31labs.dev/continuum/runtime"
 	"m31labs.dev/continuum/subject"
@@ -25,7 +26,7 @@ func TestExportImportArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExportArchive: %v", err)
 	}
-	if exported.Items != 7 || exported.Bytes == 0 || len(exported.Missing) != 0 {
+	if exported.Items != 8 || exported.Bytes == 0 || len(exported.Missing) != 0 {
 		t.Fatalf("exported report = %+v", exported)
 	}
 
@@ -34,7 +35,7 @@ func TestExportImportArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportArchive dry-run: %v", err)
 	}
-	if dryRun.WouldImport != 7 || dryRun.Imported != 0 {
+	if dryRun.WouldImport != 8 || dryRun.Imported != 0 {
 		t.Fatalf("dry-run report = %+v", dryRun)
 	}
 	if _, err := os.Stat(dst.GrantStore); !os.IsNotExist(err) {
@@ -45,7 +46,7 @@ func TestExportImportArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportArchive: %v", err)
 	}
-	if imported.Imported != 7 || imported.Overwritten != 0 {
+	if imported.Imported != 8 || imported.Overwritten != 0 {
 		t.Fatalf("imported report = %+v", imported)
 	}
 	grants, err := capability.LoadGrantStore(dst.GrantStore)
@@ -70,7 +71,7 @@ func TestExportImportArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportArchive force: %v", err)
 	}
-	if forced.Imported != 7 || forced.Overwritten != 7 {
+	if forced.Imported != 8 || forced.Overwritten != 8 {
 		t.Fatalf("forced report = %+v", forced)
 	}
 	if forced.Items[0].BackupPath == "" {
@@ -94,13 +95,14 @@ func TestImportArchiveRejectsTamperedItem(t *testing.T) {
 
 func testPaths(dir string) Paths {
 	return Paths{
-		PolicyStore:   filepath.Join(dir, "policies.json"),
-		GrantStore:    filepath.Join(dir, "grants.json"),
-		DeliveryStore: filepath.Join(dir, "deliveries.json"),
-		SessionStore:  filepath.Join(dir, "sessions.json"),
-		AirlockStore:  filepath.Join(dir, "airlock.json"),
-		IDStore:       filepath.Join(dir, "ids.json"),
-		AuditLog:      filepath.Join(dir, "audit.jsonl"),
+		PolicyStore:             filepath.Join(dir, "policies.json"),
+		GrantStore:              filepath.Join(dir, "grants.json"),
+		DeliveryStore:           filepath.Join(dir, "deliveries.json"),
+		SessionStore:            filepath.Join(dir, "sessions.json"),
+		AirlockStore:            filepath.Join(dir, "airlock.json"),
+		AirlockAccumulatorStore: filepath.Join(dir, "airlock-accumulators.json"),
+		IDStore:                 filepath.Join(dir, "ids.json"),
+		AuditLog:                filepath.Join(dir, "audit.jsonl"),
 	}
 }
 
@@ -166,6 +168,13 @@ func writeStateFixtures(t *testing.T, paths Paths, now time.Time) {
 	}
 	if err := airlocks.Save(paths.AirlockStore); err != nil {
 		t.Fatalf("airlock Save: %v", err)
+	}
+	accumulators := airlock.NewAccumulatorStore()
+	accumulators.ObserveEvents([]event.Event{
+		event.NewProcessExec(subject.Subject{Kind: "agent", Session: "agent-session-1", AgentName: "claude"}, map[string]any{"comm": "sh"}),
+	}, func() time.Time { return now })
+	if err := accumulators.Save(paths.AirlockAccumulatorStore); err != nil {
+		t.Fatalf("airlock accumulator Save: %v", err)
 	}
 	ids := &cruntime.IDStore{SchemaVersion: cruntime.IDStoreSchemaVersion, Counters: map[string]uint64{"evt": 3, "grant": 1}}
 	if err := ids.Save(paths.IDStore); err != nil {

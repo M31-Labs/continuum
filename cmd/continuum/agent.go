@@ -84,14 +84,15 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 
 func daemonStatePaths(cfg config.Config) cruntime.StatePaths {
 	return cruntime.StatePaths{
-		PolicyStore:  cfg.State.PolicyStore,
-		PolicyBundle: cfg.Policy.Bundle,
-		Sessions:     cfg.State.SessionStore,
-		Grants:       cfg.State.GrantStore,
-		Deliveries:   cfg.State.DeliveryStore,
-		IDStore:      cfg.State.IDStore,
-		Airlock:      cfg.State.AirlockStore,
-		Audit:        cfg.Audit.Path,
+		PolicyStore:         cfg.State.PolicyStore,
+		PolicyBundle:        cfg.Policy.Bundle,
+		Sessions:            cfg.State.SessionStore,
+		Grants:              cfg.State.GrantStore,
+		Deliveries:          cfg.State.DeliveryStore,
+		IDStore:             cfg.State.IDStore,
+		Airlock:             cfg.State.AirlockStore,
+		AirlockAccumulators: cfg.State.AirlockAccumulatorStore,
+		Audit:               cfg.Audit.Path,
 	}
 }
 

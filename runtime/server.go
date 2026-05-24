@@ -17,15 +17,16 @@ import (
 )
 
 type StatePaths struct {
-	PolicyStore   string
-	PolicyBundle  string
-	Sessions      string
-	Grants        string
-	Deliveries    string
-	IDStore       string
-	Airlock       string
-	AirlockPolicy string
-	Audit         string
+	PolicyStore         string
+	PolicyBundle        string
+	Sessions            string
+	Grants              string
+	Deliveries          string
+	IDStore             string
+	Airlock             string
+	AirlockAccumulators string
+	AirlockPolicy       string
+	Audit               string
 }
 
 type HTTPOptions struct {
@@ -206,9 +207,10 @@ func NewHTTPHandlerWithStateAndOptions(daemon *Daemon, paths StatePaths, opts HT
 			Registry:      daemon.Registry,
 			EnableAirlock: !truthy(r.URL.Query().Get("no_airlock")),
 			Airlock: AirlockOptions{
-				PolicyPath: queryPathAny(r, []string{"airlock-policy", "airlock_policy"}, paths.AirlockPolicy),
-				StorePath:  queryPathAny(r, []string{"airlock-store", "airlock_store"}, paths.Airlock),
-				AuditPath:  queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
+				PolicyPath:           queryPathAny(r, []string{"airlock-policy", "airlock_policy"}, paths.AirlockPolicy),
+				StorePath:            queryPathAny(r, []string{"airlock-store", "airlock_store"}, paths.Airlock),
+				AccumulatorStorePath: queryPathAny(r, []string{"airlock-accumulators", "airlock_accumulators", "airlock-accumulator-store", "airlock_accumulator_store"}, paths.AirlockAccumulators),
+				AuditPath:            queryPathAny(r, []string{"audit", "audit_path"}, paths.Audit),
 			},
 		})
 		if err != nil {
@@ -311,6 +313,9 @@ func (p StatePaths) withDefaults() StatePaths {
 	}
 	if p.Airlock == "" {
 		p.Airlock = ".continuum/airlock.json"
+	}
+	if p.AirlockAccumulators == "" {
+		p.AirlockAccumulators = ".continuum/airlock-accumulators.json"
 	}
 	if p.AirlockPolicy == "" {
 		p.AirlockPolicy = DefaultAirlockPolicyPath

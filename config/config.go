@@ -37,12 +37,13 @@ type CapabilitiesConfig struct {
 }
 
 type StateConfig struct {
-	PolicyStore   string `json:"policy_store"`
-	GrantStore    string `json:"grant_store"`
-	DeliveryStore string `json:"delivery_store"`
-	SessionStore  string `json:"session_store"`
-	AirlockStore  string `json:"airlock_store"`
-	IDStore       string `json:"id_store"`
+	PolicyStore             string `json:"policy_store"`
+	GrantStore              string `json:"grant_store"`
+	DeliveryStore           string `json:"delivery_store"`
+	SessionStore            string `json:"session_store"`
+	AirlockStore            string `json:"airlock_store"`
+	AirlockAccumulatorStore string `json:"airlock_accumulator_store"`
+	IDStore                 string `json:"id_store"`
 }
 
 type DaemonConfig struct {
@@ -73,12 +74,13 @@ func Default() Config {
 			HorizonManifestDir: ".continuum/capabilities",
 		},
 		State: StateConfig{
-			PolicyStore:   ".continuum/policies.json",
-			GrantStore:    ".continuum/grants.json",
-			DeliveryStore: ".continuum/deliveries.json",
-			SessionStore:  ".continuum/sessions.json",
-			AirlockStore:  ".continuum/airlock.json",
-			IDStore:       ".continuum/ids.json",
+			PolicyStore:             ".continuum/policies.json",
+			GrantStore:              ".continuum/grants.json",
+			DeliveryStore:           ".continuum/deliveries.json",
+			SessionStore:            ".continuum/sessions.json",
+			AirlockStore:            ".continuum/airlock.json",
+			AirlockAccumulatorStore: ".continuum/airlock-accumulators.json",
+			IDStore:                 ".continuum/ids.json",
 		},
 		Grant: GrantConfig{MaxTTL: "24h"},
 		Enforcement: EnforcementConfig{

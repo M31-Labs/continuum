@@ -26,6 +26,7 @@ func runStatus(args []string, stdout, stderr io.Writer) error {
 	grantStorePath := fs.String("grant-store", defaultGrantStorePath, "grant store")
 	deliveryStorePath := fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	airlockStorePath := fs.String("airlock-store", defaultAirlockStorePath, "airlock state store")
+	airlockAccumulatorStorePath := fs.String("airlock-accumulators", defaultAirlockAccumulatorStorePath, "airlock behavior accumulator store")
 	sessionStorePath := fs.String("session-store", defaultSessionStorePath, "session store")
 	idStorePath := fs.String("id-store", defaultIDStorePath, "monotonic id store")
 	auditPath := fs.String("audit", defaultAuditPath, "audit JSONL path")
@@ -36,7 +37,7 @@ func runStatus(args []string, stdout, stderr io.Writer) error {
 	if fs.NArg() != 0 {
 		return usageError("Usage: continuum status [--config continuum.toml] [--json]")
 	}
-	snapshot, err := loadStatusSnapshot(*configPath, *policyStorePath, *grantStorePath, *deliveryStorePath, *airlockStorePath, *sessionStorePath, *idStorePath, *auditPath)
+	snapshot, err := loadStatusSnapshot(*configPath, *policyStorePath, *grantStorePath, *deliveryStorePath, *airlockStorePath, *airlockAccumulatorStorePath, *sessionStorePath, *idStorePath, *auditPath)
 	if err != nil {
 		return err
 	}
@@ -49,31 +50,32 @@ func runStatus(args []string, stdout, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "policy: active=%s bundles=%d\n", snapshot.ActivePolicy, snapshot.PolicyBundles)
 	fmt.Fprintf(stdout, "capabilities: total=%d sources=%d sinks=%d workers=%d privileged=%d\n",
 		snapshot.Health.Capabilities, snapshot.Health.SourceCount, snapshot.Health.SinkCount, snapshot.Health.WorkerCount, snapshot.Health.PrivilegedCount)
-	fmt.Fprintf(stdout, "state: active_grants=%d deliveries=%d pending_deliveries=%d failed_deliveries=%d airlocks=%d running_sessions=%d stale_sessions=%d sessions=%d id_counters=%d audit_events=%d\n", snapshot.ActiveGrants, snapshot.Deliveries, snapshot.PendingDeliveries, snapshot.FailedDeliveries, snapshot.AirlockSessions, snapshot.RunningSessions, snapshot.StaleSessions, snapshot.Sessions, snapshot.IDCounters, snapshot.AuditEvents)
+	fmt.Fprintf(stdout, "state: active_grants=%d deliveries=%d pending_deliveries=%d failed_deliveries=%d airlocks=%d airlock_subjects=%d running_sessions=%d stale_sessions=%d sessions=%d id_counters=%d audit_events=%d\n", snapshot.ActiveGrants, snapshot.Deliveries, snapshot.PendingDeliveries, snapshot.FailedDeliveries, snapshot.AirlockSessions, snapshot.AirlockAccumulatorSubjects, snapshot.RunningSessions, snapshot.StaleSessions, snapshot.Sessions, snapshot.IDCounters, snapshot.AuditEvents)
 	fmt.Fprintf(stdout, "enforcement: file=%s network=%s process=%s\n", snapshot.Enforcement.File, snapshot.Enforcement.Network, snapshot.Enforcement.Process)
 	return nil
 }
 
 type statusSnapshot struct {
-	Project           string                   `json:"project"`
-	ConfigPath        string                   `json:"config_path"`
-	PolicyBundles     int                      `json:"policy_bundles"`
-	ActivePolicy      string                   `json:"active_policy,omitempty"`
-	ActiveGrants      int                      `json:"active_grants"`
-	Deliveries        int                      `json:"deliveries"`
-	PendingDeliveries int                      `json:"pending_deliveries"`
-	FailedDeliveries  int                      `json:"failed_deliveries"`
-	AirlockSessions   int                      `json:"airlock_sessions"`
-	Sessions          int                      `json:"sessions"`
-	RunningSessions   int                      `json:"running_sessions"`
-	StaleSessions     int                      `json:"stale_sessions"`
-	IDCounters        int                      `json:"id_counters"`
-	AuditEvents       int                      `json:"audit_events"`
-	Health            cruntime.Health          `json:"health"`
-	Enforcement       config.EnforcementConfig `json:"enforcement"`
+	Project                    string                   `json:"project"`
+	ConfigPath                 string                   `json:"config_path"`
+	PolicyBundles              int                      `json:"policy_bundles"`
+	ActivePolicy               string                   `json:"active_policy,omitempty"`
+	ActiveGrants               int                      `json:"active_grants"`
+	Deliveries                 int                      `json:"deliveries"`
+	PendingDeliveries          int                      `json:"pending_deliveries"`
+	FailedDeliveries           int                      `json:"failed_deliveries"`
+	AirlockSessions            int                      `json:"airlock_sessions"`
+	AirlockAccumulatorSubjects int                      `json:"airlock_accumulator_subjects"`
+	Sessions                   int                      `json:"sessions"`
+	RunningSessions            int                      `json:"running_sessions"`
+	StaleSessions              int                      `json:"stale_sessions"`
+	IDCounters                 int                      `json:"id_counters"`
+	AuditEvents                int                      `json:"audit_events"`
+	Health                     cruntime.Health          `json:"health"`
+	Enforcement                config.EnforcementConfig `json:"enforcement"`
 }
 
-func loadStatusSnapshot(configPath, policyStorePath, grantStorePath, deliveryStorePath, airlockStorePath, sessionStorePath, idStorePath, auditPath string) (statusSnapshot, error) {
+func loadStatusSnapshot(configPath, policyStorePath, grantStorePath, deliveryStorePath, airlockStorePath, airlockAccumulatorStorePath, sessionStorePath, idStorePath, auditPath string) (statusSnapshot, error) {
 	cfg, configUsed, err := loadStatusConfig(configPath)
 	if err != nil {
 		return statusSnapshot{}, err
@@ -84,6 +86,7 @@ func loadStatusSnapshot(configPath, policyStorePath, grantStorePath, deliverySto
 	grantStorePath = resolveGrantStorePath(grantStorePath, cliCfg)
 	deliveryStorePath = resolveDeliveryStorePath(deliveryStorePath, cliCfg)
 	airlockStorePath = resolveAirlockStorePath(airlockStorePath, cliCfg)
+	airlockAccumulatorStorePath = resolveAirlockAccumulatorStorePath(airlockAccumulatorStorePath, cliCfg)
 	sessionStorePath = resolveSessionStorePath(sessionStorePath, cliCfg)
 	idStorePath = resolveIDStorePath(idStorePath, cliCfg)
 	auditPath = resolveAuditPath(auditPath, false, cliCfg)
@@ -104,6 +107,10 @@ func loadStatusSnapshot(configPath, policyStorePath, grantStorePath, deliverySto
 		return statusSnapshot{}, err
 	}
 	airlocks, err := airlock.LoadStore(airlockStorePath)
+	if err != nil {
+		return statusSnapshot{}, err
+	}
+	airlockAccumulators, err := airlock.LoadAccumulatorStore(airlockAccumulatorStorePath)
 	if err != nil {
 		return statusSnapshot{}, err
 	}
@@ -128,22 +135,23 @@ func loadStatusSnapshot(configPath, policyStorePath, grantStorePath, deliverySto
 		activePolicy = active.Name
 	}
 	return statusSnapshot{
-		Project:           cfg.Project.Name,
-		ConfigPath:        configUsed,
-		PolicyBundles:     len(policies.Bundles),
-		ActivePolicy:      activePolicy,
-		ActiveGrants:      len(grants.Active(time.Now().UTC())),
-		Deliveries:        len(deliveries.List()),
-		PendingDeliveries: len(deliveries.ByStatus(cruntime.DeliveryPending)),
-		FailedDeliveries:  len(deliveries.ByStatus(cruntime.DeliveryFailed)),
-		AirlockSessions:   len(airlocks.List()),
-		Sessions:          len(sessions.Sessions),
-		RunningSessions:   len(sessions.Running()),
-		StaleSessions:     len(sessions.Stale()),
-		IDCounters:        len(ids.Counters),
-		AuditEvents:       auditEvents,
-		Health:            daemon.Health(),
-		Enforcement:       cfg.Enforcement,
+		Project:                    cfg.Project.Name,
+		ConfigPath:                 configUsed,
+		PolicyBundles:              len(policies.Bundles),
+		ActivePolicy:               activePolicy,
+		ActiveGrants:               len(grants.Active(time.Now().UTC())),
+		Deliveries:                 len(deliveries.List()),
+		PendingDeliveries:          len(deliveries.ByStatus(cruntime.DeliveryPending)),
+		FailedDeliveries:           len(deliveries.ByStatus(cruntime.DeliveryFailed)),
+		AirlockSessions:            len(airlocks.List()),
+		AirlockAccumulatorSubjects: len(airlockAccumulators.List()),
+		Sessions:                   len(sessions.Sessions),
+		RunningSessions:            len(sessions.Running()),
+		StaleSessions:              len(sessions.Stale()),
+		IDCounters:                 len(ids.Counters),
+		AuditEvents:                auditEvents,
+		Health:                     daemon.Health(),
+		Enforcement:                cfg.Enforcement,
 	}, nil
 }
 

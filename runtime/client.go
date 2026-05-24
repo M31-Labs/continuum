@@ -18,17 +18,18 @@ type Client struct {
 }
 
 type ClientIngestOptions struct {
-	PolicyPath    string
-	PolicyStore   string
-	SessionStore  string
-	GrantStore    string
-	DeliveryStore string
-	IDStore       string
-	AuditPath     string
-	AuthToken     string
-	AirlockPolicy string
-	AirlockStore  string
-	NoAirlock     bool
+	PolicyPath              string
+	PolicyStore             string
+	SessionStore            string
+	GrantStore              string
+	DeliveryStore           string
+	IDStore                 string
+	AuditPath               string
+	AuthToken               string
+	AirlockPolicy           string
+	AirlockStore            string
+	AirlockAccumulatorStore string
+	NoAirlock               bool
 }
 
 func NewClient(baseURL string) Client {
@@ -53,6 +54,7 @@ func (c Client) Ingest(ctx context.Context, data []byte, opts ClientIngestOption
 	addQuery(query, "audit", opts.AuditPath)
 	addQuery(query, "airlock-policy", opts.AirlockPolicy)
 	addQuery(query, "airlock-store", opts.AirlockStore)
+	addQuery(query, "airlock-accumulator-store", opts.AirlockAccumulatorStore)
 	if opts.NoAirlock {
 		query.Set("no_airlock", "true")
 	}

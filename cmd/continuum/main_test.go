@@ -1299,6 +1299,7 @@ func TestIngestCommandAccumulatesAirlockBehavior(t *testing.T) {
 		"--events", eventsPath,
 		"--audit", filepath.Join(dir, "audit.jsonl"),
 		"--airlock-store", airlockStore,
+		"--airlock-accumulators", filepath.Join(dir, "airlock-accumulators.json"),
 	}, &out, &errOut); err != nil {
 		t.Fatalf("ingest: %v\nstderr=%s", err, errOut.String())
 	}
@@ -1674,6 +1675,13 @@ func TestStateExportBackupImportCommands(t *testing.T) {
 	if err := run([]string{"airlock", "enter", "--store", src.airlockStore, "--id-store", src.idStore, "--pid", "4321", "--reason", "worm-like fanout"}, &out, &errOut); err != nil {
 		t.Fatalf("airlock enter: %v\nstderr=%s", err, errOut.String())
 	}
+	accumulators := airlock.NewAccumulatorStore()
+	accumulators.ObserveEvents([]event.Event{
+		event.NewProcessExec(subject.NewAgent("claude", "agent-42", "/repo", "", 4321), map[string]any{"comm": "sh", "argv_text": "sh -c true"}),
+	}, func() time.Time { return time.Date(2026, 5, 24, 3, 0, 0, 0, time.UTC) })
+	if err := accumulators.Save(src.airlockAccumulatorStore); err != nil {
+		t.Fatalf("airlock accumulator Save: %v", err)
+	}
 	sink, err := audit.NewJSONLSink(src.audit)
 	if err != nil {
 		t.Fatalf("NewJSONLSink: %v", err)
@@ -1689,7 +1697,7 @@ func TestStateExportBackupImportCommands(t *testing.T) {
 	if err := run(append([]string{"state", "export", "--out", archivePath}, src.args()...), &out, &errOut); err != nil {
 		t.Fatalf("state export: %v\nstderr=%s", err, errOut.String())
 	}
-	if !strings.Contains(out.String(), "exported state items=7") {
+	if !strings.Contains(out.String(), "exported state items=8") {
 		t.Fatalf("state export output = %q", out.String())
 	}
 	out.Reset()
@@ -1704,14 +1712,14 @@ func TestStateExportBackupImportCommands(t *testing.T) {
 	if err := run(append([]string{"state", "import", "--in", archivePath, "--dry-run"}, dst.args()...), &out, &errOut); err != nil {
 		t.Fatalf("state import dry-run: %v\nstderr=%s", err, errOut.String())
 	}
-	if !strings.Contains(out.String(), "would_import=7") {
+	if !strings.Contains(out.String(), "would_import=8") {
 		t.Fatalf("state import dry-run output = %q", out.String())
 	}
 	out.Reset()
 	if err := run(append([]string{"state", "import", "--in", archivePath}, dst.args()...), &out, &errOut); err != nil {
 		t.Fatalf("state import: %v\nstderr=%s", err, errOut.String())
 	}
-	if !strings.Contains(out.String(), "imported state items=7") {
+	if !strings.Contains(out.String(), "imported state items=8") {
 		t.Fatalf("state import output = %q", out.String())
 	}
 	reloadedPolicy, err := policy.LoadStore(dst.policyStore)
@@ -1735,6 +1743,13 @@ func TestStateExportBackupImportCommands(t *testing.T) {
 	if len(reloadedEvents) != 1 || reloadedEvents[0].ID != "evt_state_export" {
 		t.Fatalf("imported audit events = %+v", reloadedEvents)
 	}
+	reloadedAccumulators, err := airlock.LoadAccumulatorStore(dst.airlockAccumulatorStore)
+	if err != nil {
+		t.Fatalf("LoadAccumulatorStore: %v", err)
+	}
+	if len(reloadedAccumulators.List()) != 1 {
+		t.Fatalf("imported airlock accumulators = %+v", reloadedAccumulators.List())
+	}
 
 	out.Reset()
 	err = run(append([]string{"state", "import", "--in", archivePath}, dst.args()...), &out, &errOut)
@@ -1755,24 +1770,26 @@ func TestStateExportBackupImportCommands(t *testing.T) {
 }
 
 type commandStatePathSet struct {
-	policyStore   string
-	grantStore    string
-	deliveryStore string
-	sessionStore  string
-	airlockStore  string
-	idStore       string
-	audit         string
+	policyStore             string
+	grantStore              string
+	deliveryStore           string
+	sessionStore            string
+	airlockStore            string
+	airlockAccumulatorStore string
+	idStore                 string
+	audit                   string
 }
 
 func commandStatePaths(dir string) commandStatePathSet {
 	return commandStatePathSet{
-		policyStore:   filepath.Join(dir, "policies.json"),
-		grantStore:    filepath.Join(dir, "grants.json"),
-		deliveryStore: filepath.Join(dir, "deliveries.json"),
-		sessionStore:  filepath.Join(dir, "sessions.json"),
-		airlockStore:  filepath.Join(dir, "airlock.json"),
-		idStore:       filepath.Join(dir, "ids.json"),
-		audit:         filepath.Join(dir, "audit.jsonl"),
+		policyStore:             filepath.Join(dir, "policies.json"),
+		grantStore:              filepath.Join(dir, "grants.json"),
+		deliveryStore:           filepath.Join(dir, "deliveries.json"),
+		sessionStore:            filepath.Join(dir, "sessions.json"),
+		airlockStore:            filepath.Join(dir, "airlock.json"),
+		airlockAccumulatorStore: filepath.Join(dir, "airlock-accumulators.json"),
+		idStore:                 filepath.Join(dir, "ids.json"),
+		audit:                   filepath.Join(dir, "audit.jsonl"),
 	}
 }
 
@@ -1783,6 +1800,7 @@ func (p commandStatePathSet) args() []string {
 		"--delivery-store", p.deliveryStore,
 		"--session-store", p.sessionStore,
 		"--airlock-store", p.airlockStore,
+		"--airlock-accumulators", p.airlockAccumulatorStore,
 		"--id-store", p.idStore,
 		"--audit", p.audit,
 	}

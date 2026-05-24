@@ -139,11 +139,12 @@ func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	handler := NewHTTPHandlerWithState(daemon, StatePaths{
-		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
-		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
-		Audit:         auditPath,
-		Deliveries:    deliveryPath,
-		Airlock:       filepath.Join(dir, "airlock.json"),
+		PolicyBundle:        filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		AirlockPolicy:       filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+		Audit:               auditPath,
+		Deliveries:          deliveryPath,
+		Airlock:             filepath.Join(dir, "airlock.json"),
+		AirlockAccumulators: filepath.Join(dir, "airlock-accumulators.json"),
 	})
 	body := `{
   "id": "evt_secret",
@@ -190,10 +191,11 @@ func TestHTTPHandlerRequiresAuthForMutatingEndpoints(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	handler := NewHTTPHandlerWithStateAndOptions(daemon, StatePaths{
-		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
-		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
-		Audit:         filepath.Join(dir, "audit.jsonl"),
-		Airlock:       filepath.Join(dir, "airlock.json"),
+		PolicyBundle:        filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		AirlockPolicy:       filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+		Audit:               filepath.Join(dir, "audit.jsonl"),
+		Airlock:             filepath.Join(dir, "airlock.json"),
+		AirlockAccumulators: filepath.Join(dir, "airlock-accumulators.json"),
 	}, HTTPOptions{AuthToken: "secret"})
 	body := `{"kind":"process.exec","subject":{"session":"agent-42","agent_name":"claude","repo_root":"/repo"},"fields":{"comm":"go","argv_text":"go test ./...","cwd":"/repo"}}`
 	res := httptest.NewRecorder()
@@ -255,11 +257,12 @@ func TestHTTPHandlerIngestsHorizonEnvelope(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	handler := NewHTTPHandlerWithState(daemon, StatePaths{
-		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
-		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
-		Audit:         filepath.Join(dir, "audit.jsonl"),
-		Sessions:      filepath.Join(dir, "sessions.json"),
-		Airlock:       filepath.Join(dir, "airlock.json"),
+		PolicyBundle:        filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		AirlockPolicy:       filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+		Audit:               filepath.Join(dir, "audit.jsonl"),
+		Sessions:            filepath.Join(dir, "sessions.json"),
+		Airlock:             filepath.Join(dir, "airlock.json"),
+		AirlockAccumulators: filepath.Join(dir, "airlock-accumulators.json"),
 	})
 	body := `{
   "id": "hzn_exec",
@@ -301,10 +304,11 @@ func TestHTTPHandlerIngestTriggersAirlock(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	handler := NewHTTPHandlerWithState(daemon, StatePaths{
-		PolicyBundle:  filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
-		AirlockPolicy: filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
-		Audit:         filepath.Join(dir, "audit.jsonl"),
-		Airlock:       filepath.Join(dir, "airlock.json"),
+		PolicyBundle:        filepath.Join("..", "examples", "agent-workdir", "policies", "main.arb"),
+		AirlockPolicy:       filepath.Join("..", "examples", "airlock", "policies", "main.arb"),
+		Audit:               filepath.Join(dir, "audit.jsonl"),
+		Airlock:             filepath.Join(dir, "airlock.json"),
+		AirlockAccumulators: filepath.Join(dir, "airlock-accumulators.json"),
 	})
 	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
 	var events []event.Event

@@ -111,7 +111,7 @@ enforcement backends exist and are reviewed.
 
 ## Airlock Readiness
 
-- [ ] Persist airlock behavior accumulators across daemon restarts.
+- [x] Persist airlock behavior accumulators across daemon restarts.
 - [x] Add airlock release/remediation audit events.
 - [x] Add airlock state transition validation tests for all legal paths.
 - [x] Add operator notes to airlock sessions.

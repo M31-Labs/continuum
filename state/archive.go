@@ -22,13 +22,14 @@ import (
 const ArchiveSchemaVersion = 1
 
 const (
-	ItemPolicyStore   = "policy_store"
-	ItemGrantStore    = "grant_store"
-	ItemDeliveryStore = "delivery_store"
-	ItemSessionStore  = "session_store"
-	ItemAirlockStore  = "airlock_store"
-	ItemIDStore       = "id_store"
-	ItemAuditLog      = "audit_log"
+	ItemPolicyStore             = "policy_store"
+	ItemGrantStore              = "grant_store"
+	ItemDeliveryStore           = "delivery_store"
+	ItemSessionStore            = "session_store"
+	ItemAirlockStore            = "airlock_store"
+	ItemAirlockAccumulatorStore = "airlock_accumulator_store"
+	ItemIDStore                 = "id_store"
+	ItemAuditLog                = "audit_log"
 )
 
 const (
@@ -37,13 +38,14 @@ const (
 )
 
 type Paths struct {
-	PolicyStore   string
-	GrantStore    string
-	DeliveryStore string
-	SessionStore  string
-	AirlockStore  string
-	IDStore       string
-	AuditLog      string
+	PolicyStore             string
+	GrantStore              string
+	DeliveryStore           string
+	SessionStore            string
+	AirlockStore            string
+	AirlockAccumulatorStore string
+	IDStore                 string
+	AuditLog                string
 }
 
 type Archive struct {
@@ -254,6 +256,7 @@ func KnownItemNames() []string {
 		ItemDeliveryStore,
 		ItemSessionStore,
 		ItemAirlockStore,
+		ItemAirlockAccumulatorStore,
 		ItemIDStore,
 		ItemAuditLog,
 	}
@@ -268,6 +271,7 @@ func itemSpecs(paths Paths) []itemSpec {
 		{name: ItemDeliveryStore, kind: KindJSON, path: paths.DeliveryStore},
 		{name: ItemSessionStore, kind: KindJSON, path: paths.SessionStore},
 		{name: ItemAirlockStore, kind: KindJSON, path: paths.AirlockStore},
+		{name: ItemAirlockAccumulatorStore, kind: KindJSON, path: paths.AirlockAccumulatorStore},
 		{name: ItemIDStore, kind: KindJSON, path: paths.IDStore},
 		{name: ItemAuditLog, kind: KindJSONL, path: paths.AuditLog},
 	}
@@ -342,6 +346,8 @@ func validateItemBytes(name string, data []byte) error {
 		_, err = cruntime.LoadSessionStore(path)
 	case ItemAirlockStore:
 		_, err = airlock.LoadStore(path)
+	case ItemAirlockAccumulatorStore:
+		_, err = airlock.LoadAccumulatorStore(path)
 	case ItemIDStore:
 		_, err = cruntime.LoadIDStore(path)
 	case ItemAuditLog:

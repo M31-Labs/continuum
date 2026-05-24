@@ -40,12 +40,13 @@ func Validate(cfg Config) error {
 		return fmt.Errorf("approval.kind %q is not supported", cfg.Approval.Kind)
 	}
 	for name, path := range map[string]string{
-		"policy_store":   cfg.State.PolicyStore,
-		"grant_store":    cfg.State.GrantStore,
-		"delivery_store": cfg.State.DeliveryStore,
-		"session_store":  cfg.State.SessionStore,
-		"airlock_store":  cfg.State.AirlockStore,
-		"id_store":       cfg.State.IDStore,
+		"policy_store":              cfg.State.PolicyStore,
+		"grant_store":               cfg.State.GrantStore,
+		"delivery_store":            cfg.State.DeliveryStore,
+		"session_store":             cfg.State.SessionStore,
+		"airlock_store":             cfg.State.AirlockStore,
+		"airlock_accumulator_store": cfg.State.AirlockAccumulatorStore,
+		"id_store":                  cfg.State.IDStore,
 	} {
 		if path == "" {
 			return fmt.Errorf("state.%s is required", name)

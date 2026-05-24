@@ -155,6 +155,24 @@ func (s *Store) Get(id string) (Session, bool) {
 	return session, true
 }
 
+func (s *Store) ActiveForSubject(subj subject.Subject) (Session, bool) {
+	if s == nil {
+		return Session{}, false
+	}
+	target := subj.String()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, session := range s.sessions {
+		if terminalState(session.State) {
+			continue
+		}
+		if session.Subject.String() == target {
+			return session, true
+		}
+	}
+	return Session{}, false
+}
+
 func (s *Store) AddNote(id, operator, text string, now time.Time) (Session, Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

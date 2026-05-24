@@ -8,13 +8,14 @@ import (
 )
 
 const (
-	defaultPolicyStorePath   = ".continuum/policies.json"
-	defaultGrantStorePath    = ".continuum/grants.json"
-	defaultDeliveryStorePath = ".continuum/deliveries.json"
-	defaultSessionStorePath  = ".continuum/sessions.json"
-	defaultAirlockStorePath  = ".continuum/airlock.json"
-	defaultIDStorePath       = ".continuum/ids.json"
-	defaultAuditPath         = ".continuum/audit.jsonl"
+	defaultPolicyStorePath             = ".continuum/policies.json"
+	defaultGrantStorePath              = ".continuum/grants.json"
+	defaultDeliveryStorePath           = ".continuum/deliveries.json"
+	defaultSessionStorePath            = ".continuum/sessions.json"
+	defaultAirlockStorePath            = ".continuum/airlock.json"
+	defaultAirlockAccumulatorStorePath = ".continuum/airlock-accumulators.json"
+	defaultIDStorePath                 = ".continuum/ids.json"
+	defaultAuditPath                   = ".continuum/audit.jsonl"
 )
 
 type cliConfig struct {
@@ -121,6 +122,16 @@ func resolveAirlockStorePath(path string, cfg cliConfig) string {
 	}
 	if cfg.ConfigPath != "<default>" && cfg.Config.State.AirlockStore != "" {
 		return cfg.Config.State.AirlockStore
+	}
+	return path
+}
+
+func resolveAirlockAccumulatorStorePath(path string, cfg cliConfig) string {
+	if path != "" && path != defaultAirlockAccumulatorStorePath {
+		return path
+	}
+	if cfg.ConfigPath != "<default>" && cfg.Config.State.AirlockAccumulatorStore != "" {
+		return cfg.Config.State.AirlockAccumulatorStore
 	}
 	return path
 }

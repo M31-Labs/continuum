@@ -32,6 +32,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	manifestDir := fs.String("manifest-dir", "", "Horizon capability manifest directory for Horizon event envelopes")
 	airlockPolicyPath := fs.String("airlock-policy", cruntime.DefaultAirlockPolicyPath, "airlock policy path")
 	airlockStorePath := fs.String("airlock-store", defaultAirlockStorePath, "airlock state store")
+	airlockAccumulatorStorePath := fs.String("airlock-accumulators", defaultAirlockAccumulatorStorePath, "airlock behavior accumulator store")
 	noAirlock := fs.Bool("no-airlock", false, "skip airlock behavior accumulation")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -48,6 +49,7 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	*grantPath = resolveGrantStorePath(*grantPath, cfg)
 	*deliveryPath = resolveDeliveryStorePath(*deliveryPath, cfg)
 	*airlockStorePath = resolveAirlockStorePath(*airlockStorePath, cfg)
+	*airlockAccumulatorStorePath = resolveAirlockAccumulatorStorePath(*airlockAccumulatorStorePath, cfg)
 	*idStorePath = resolveIDStorePath(*idStorePath, cfg)
 	maxGrantTTL, err := configuredMaxGrantTTL(cfg)
 	if err != nil {
@@ -67,17 +69,18 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		result, err := cruntime.NewClient(*daemonURL).Ingest(context.Background(), data, cruntime.ClientIngestOptions{
-			PolicyPath:    resolvedPolicy,
-			PolicyStore:   *policyStorePath,
-			SessionStore:  *sessionPath,
-			GrantStore:    *grantPath,
-			DeliveryStore: *deliveryPath,
-			IDStore:       *idStorePath,
-			AuditPath:     *auditPath,
-			AuthToken:     *daemonToken,
-			AirlockPolicy: *airlockPolicyPath,
-			AirlockStore:  *airlockStorePath,
-			NoAirlock:     *noAirlock,
+			PolicyPath:              resolvedPolicy,
+			PolicyStore:             *policyStorePath,
+			SessionStore:            *sessionPath,
+			GrantStore:              *grantPath,
+			DeliveryStore:           *deliveryPath,
+			IDStore:                 *idStorePath,
+			AuditPath:               *auditPath,
+			AuthToken:               *daemonToken,
+			AirlockPolicy:           *airlockPolicyPath,
+			AirlockStore:            *airlockStorePath,
+			AirlockAccumulatorStore: *airlockAccumulatorStorePath,
+			NoAirlock:               *noAirlock,
 		})
 		if err != nil {
 			return err
@@ -142,10 +145,11 @@ func runIngest(args []string, stdout, stderr io.Writer) error {
 	}
 	if !*noAirlock {
 		airlocks, err := cruntime.EvaluateAirlockForEvents(context.Background(), events, cruntime.AirlockOptions{
-			PolicyPath: *airlockPolicyPath,
-			StorePath:  *airlockStorePath,
-			AuditPath:  *auditPath,
-			IDStore:    *idStorePath,
+			PolicyPath:           *airlockPolicyPath,
+			StorePath:            *airlockStorePath,
+			AccumulatorStorePath: *airlockAccumulatorStorePath,
+			AuditPath:            *auditPath,
+			IDStore:              *idStorePath,
 		})
 		if err != nil {
 			return err

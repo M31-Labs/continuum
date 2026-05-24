@@ -63,6 +63,11 @@ func CheckReadiness(daemon *Daemon, paths StatePaths) ReadinessStatus {
 	} else {
 		status.add("airlock", true, "")
 	}
+	if _, err := airlock.LoadAccumulatorStore(paths.AirlockAccumulators); err != nil {
+		status.add("airlock accumulators", false, err.Error())
+	} else {
+		status.add("airlock accumulators", true, "")
+	}
 	return status
 }
 

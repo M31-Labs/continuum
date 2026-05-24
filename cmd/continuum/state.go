@@ -130,36 +130,39 @@ func runStateImport(args []string, stdout, stderr io.Writer) error {
 }
 
 type statePathFlags struct {
-	policyStore   *string
-	grantStore    *string
-	deliveryStore *string
-	sessionStore  *string
-	airlockStore  *string
-	idStore       *string
-	audit         *string
+	policyStore             *string
+	grantStore              *string
+	deliveryStore           *string
+	sessionStore            *string
+	airlockStore            *string
+	airlockAccumulatorStore *string
+	idStore                 *string
+	audit                   *string
 }
 
 func addStatePathFlags(fs *flag.FlagSet) statePathFlags {
 	return statePathFlags{
-		policyStore:   fs.String("policy-store", defaultPolicyStorePath, "policy store"),
-		grantStore:    fs.String("grant-store", defaultGrantStorePath, "grant store"),
-		deliveryStore: fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store"),
-		sessionStore:  fs.String("session-store", defaultSessionStorePath, "session store"),
-		airlockStore:  fs.String("airlock-store", defaultAirlockStorePath, "airlock state store"),
-		idStore:       fs.String("id-store", defaultIDStorePath, "monotonic id store"),
-		audit:         fs.String("audit", defaultAuditPath, "audit JSONL path"),
+		policyStore:             fs.String("policy-store", defaultPolicyStorePath, "policy store"),
+		grantStore:              fs.String("grant-store", defaultGrantStorePath, "grant store"),
+		deliveryStore:           fs.String("delivery-store", defaultDeliveryStorePath, "delivery queue store"),
+		sessionStore:            fs.String("session-store", defaultSessionStorePath, "session store"),
+		airlockStore:            fs.String("airlock-store", defaultAirlockStorePath, "airlock state store"),
+		airlockAccumulatorStore: fs.String("airlock-accumulators", defaultAirlockAccumulatorStorePath, "airlock behavior accumulator store"),
+		idStore:                 fs.String("id-store", defaultIDStorePath, "monotonic id store"),
+		audit:                   fs.String("audit", defaultAuditPath, "audit JSONL path"),
 	}
 }
 
 func resolveStatePaths(flags statePathFlags, fs *flag.FlagSet, cfg cliConfig) statepkg.Paths {
 	return statepkg.Paths{
-		PolicyStore:   resolvePolicyStorePath(*flags.policyStore, cfg),
-		GrantStore:    resolveGrantStorePath(*flags.grantStore, cfg),
-		DeliveryStore: resolveDeliveryStorePath(*flags.deliveryStore, cfg),
-		SessionStore:  resolveSessionStorePath(*flags.sessionStore, cfg),
-		AirlockStore:  resolveAirlockStorePath(*flags.airlockStore, cfg),
-		IDStore:       resolveIDStorePath(*flags.idStore, cfg),
-		AuditLog:      resolveAuditPath(*flags.audit, flagSet(fs, "audit"), cfg),
+		PolicyStore:             resolvePolicyStorePath(*flags.policyStore, cfg),
+		GrantStore:              resolveGrantStorePath(*flags.grantStore, cfg),
+		DeliveryStore:           resolveDeliveryStorePath(*flags.deliveryStore, cfg),
+		SessionStore:            resolveSessionStorePath(*flags.sessionStore, cfg),
+		AirlockStore:            resolveAirlockStorePath(*flags.airlockStore, cfg),
+		AirlockAccumulatorStore: resolveAirlockAccumulatorStorePath(*flags.airlockAccumulatorStore, cfg),
+		IDStore:                 resolveIDStorePath(*flags.idStore, cfg),
+		AuditLog:                resolveAuditPath(*flags.audit, flagSet(fs, "audit"), cfg),
 	}
 }
 

@@ -167,13 +167,14 @@ func ResolvePolicyPath(explicitPath, storePath, fallback string) (string, error)
 }
 
 type AirlockOptions struct {
-	PolicyPath   string
-	StorePath    string
-	AuditPath    string
-	Now          func() time.Time
-	NewID        IDFunc
-	NewAirlockID IDFunc
-	IDStore      string
+	PolicyPath           string
+	StorePath            string
+	AccumulatorStorePath string
+	AuditPath            string
+	Now                  func() time.Time
+	NewID                IDFunc
+	NewAirlockID         IDFunc
+	IDStore              string
 }
 
 type AirlockResult struct {
@@ -184,25 +185,12 @@ type AirlockResult struct {
 }
 
 func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts AirlockOptions) ([]AirlockResult, error) {
-	accumulators := map[string]*airlock.Accumulator{}
-	for _, evt := range events {
-		key := evt.Subject.String()
-		if key == "" {
-			key = "unknown"
-		}
-		acc := accumulators[key]
-		if acc == nil {
-			acc = airlock.NewAccumulator(key)
-			accumulators[key] = acc
-		}
-		acc.Observe(evt)
+	behaviors, err := airlockBehaviorsForEvents(events, opts)
+	if err != nil {
+		return nil, err
 	}
-	candidates := make([]airlock.Behavior, 0, len(accumulators))
-	for _, acc := range accumulators {
-		behavior := acc.Behavior()
-		if behavior.Subject == "" {
-			behavior.Subject = "unknown"
-		}
+	candidates := make([]airlock.Behavior, 0, len(behaviors))
+	for _, behavior := range behaviors {
 		if shouldEvaluateAirlock(behavior) {
 			candidates = append(candidates, behavior)
 		}
@@ -282,6 +270,10 @@ func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts Ai
 	if len(entries) > 0 {
 		if err := airlock.UpdateStore(opts.StorePath, func(store *airlock.Store) error {
 			for _, entry := range entries {
+				if existing, ok := store.ActiveForSubject(entry.subject); ok {
+					results[entry.index].Session = &existing
+					continue
+				}
 				session, err := store.Enter(entry.id, entry.subject, entry.reason, entry.observed)
 				if err != nil {
 					return err
@@ -294,6 +286,42 @@ func EvaluateAirlockForEvents(ctx context.Context, events []event.Event, opts Ai
 		}
 	}
 	return results, nil
+}
+
+func airlockBehaviorsForEvents(events []event.Event, opts AirlockOptions) ([]airlock.Behavior, error) {
+	if opts.AccumulatorStorePath != "" {
+		var behaviors []airlock.Behavior
+		err := airlock.UpdateAccumulatorStore(opts.AccumulatorStorePath, func(store *airlock.AccumulatorStore) error {
+			behaviors = store.ObserveEvents(events, opts.Now)
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return behaviors, nil
+	}
+	accumulators := map[string]*airlock.Accumulator{}
+	for _, evt := range events {
+		key := evt.Subject.String()
+		if key == "" {
+			key = "unknown"
+		}
+		acc := accumulators[key]
+		if acc == nil {
+			acc = airlock.NewAccumulator(key)
+			accumulators[key] = acc
+		}
+		acc.Observe(evt)
+	}
+	behaviors := make([]airlock.Behavior, 0, len(accumulators))
+	for _, acc := range accumulators {
+		behavior := acc.Behavior()
+		if behavior.Subject == "" {
+			behavior.Subject = "unknown"
+		}
+		behaviors = append(behaviors, behavior)
+	}
+	return behaviors, nil
 }
 
 func airlockInputID(opts AirlockOptions, now time.Time, index int) (string, error) {

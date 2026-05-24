@@ -44,16 +44,17 @@ type doctorCheck struct {
 }
 
 type doctorOptions struct {
-	ConfigPath        string
-	PolicyPath        string
-	ManifestDir       string
-	PolicyStorePath   string
-	GrantStorePath    string
-	DeliveryStorePath string
-	AirlockStorePath  string
-	SessionStorePath  string
-	IDStorePath       string
-	AuditPath         string
+	ConfigPath                  string
+	PolicyPath                  string
+	ManifestDir                 string
+	PolicyStorePath             string
+	GrantStorePath              string
+	DeliveryStorePath           string
+	AirlockStorePath            string
+	AirlockAccumulatorStorePath string
+	SessionStorePath            string
+	IDStorePath                 string
+	AuditPath                   string
 }
 
 func runDoctor(args []string, stdout, stderr io.Writer) error {
@@ -67,6 +68,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 	fs.StringVar(&opts.GrantStorePath, "grant-store", defaultGrantStorePath, "grant store")
 	fs.StringVar(&opts.DeliveryStorePath, "delivery-store", defaultDeliveryStorePath, "delivery queue store")
 	fs.StringVar(&opts.AirlockStorePath, "airlock-store", defaultAirlockStorePath, "airlock state store")
+	fs.StringVar(&opts.AirlockAccumulatorStorePath, "airlock-accumulators", defaultAirlockAccumulatorStorePath, "airlock behavior accumulator store")
 	fs.StringVar(&opts.SessionStorePath, "session-store", defaultSessionStorePath, "session store")
 	fs.StringVar(&opts.IDStorePath, "id-store", defaultIDStorePath, "monotonic id store")
 	fs.StringVar(&opts.AuditPath, "audit", defaultAuditPath, "audit JSONL path")
@@ -121,6 +123,7 @@ func buildDoctorReport(opts doctorOptions) doctorReport {
 	grantStorePath := resolveGrantStorePath(opts.GrantStorePath, cliCfg)
 	deliveryStorePath := resolveDeliveryStorePath(opts.DeliveryStorePath, cliCfg)
 	airlockStorePath := resolveAirlockStorePath(opts.AirlockStorePath, cliCfg)
+	airlockAccumulatorStorePath := resolveAirlockAccumulatorStorePath(opts.AirlockAccumulatorStorePath, cliCfg)
 	sessionStorePath := resolveSessionStorePath(opts.SessionStorePath, cliCfg)
 	idStorePath := resolveIDStorePath(opts.IDStorePath, cliCfg)
 	auditPath := resolveAuditPath(opts.AuditPath, opts.AuditPath != defaultAuditPath, cliCfg)
@@ -138,6 +141,7 @@ func buildDoctorReport(opts doctorOptions) doctorReport {
 	report.checkGrantStore(grantStorePath, seenParents)
 	report.checkDeliveryStore(deliveryStorePath, seenParents)
 	report.checkAirlockStore(airlockStorePath, seenParents)
+	report.checkAirlockAccumulatorStore(airlockAccumulatorStorePath, seenParents)
 	report.checkSessionStore(sessionStorePath, seenParents)
 	report.checkIDStore(idStorePath, seenParents)
 	report.checkAuditLog(auditPath, seenParents)
@@ -250,6 +254,16 @@ func (r *doctorReport) checkAirlockStore(path string, seenParents map[string]boo
 		return
 	}
 	r.add(doctorOK, "airlock store", fmt.Sprintf("sessions=%d", len(store.List())), path)
+}
+
+func (r *doctorReport) checkAirlockAccumulatorStore(path string, seenParents map[string]bool) {
+	r.checkPrivateStateFile("airlock accumulator store", path, seenParents)
+	store, err := airlock.LoadAccumulatorStore(path)
+	if err != nil {
+		r.add(doctorFail, "airlock accumulator store", fmt.Sprintf("cannot read airlock accumulator store: %v", err), path)
+		return
+	}
+	r.add(doctorOK, "airlock accumulator store", fmt.Sprintf("subjects=%d", len(store.List())), path)
 }
 
 func (r *doctorReport) checkSessionStore(path string, seenParents map[string]bool) {
