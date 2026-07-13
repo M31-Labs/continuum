@@ -52,6 +52,25 @@ type signatureEnvelope struct {
 	Signature string `json:"signature"`
 }
 
+// SignPayload returns the portable JSON sidecar consumed by
+// VerifyManifestSignature. Signing is deterministic for a payload and key.
+func SignPayload(payload []byte, keyID string, key ed25519.PrivateKey) ([]byte, error) {
+	if len(key) != ed25519.PrivateKeySize {
+		return nil, fmt.Errorf("Ed25519 private key length %d is invalid", len(key))
+	}
+	envelope := signatureEnvelope{
+		Schema:    SignatureSchemaV0,
+		Algorithm: "ed25519",
+		KeyID:     strings.TrimSpace(keyID),
+		Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(key, payload)),
+	}
+	encoded, err := json.MarshalIndent(envelope, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode signature envelope: %w", err)
+	}
+	return append(encoded, '\n'), nil
+}
+
 func NormalizeSignatureMode(mode SignatureMode) (SignatureMode, error) {
 	switch mode {
 	case "", SignatureOff:
