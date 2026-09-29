@@ -223,11 +223,11 @@ func TestExportRedactsAuditEvents(t *testing.T) {
 			Kind:    "file.access",
 			Subject: subject.Subject{Kind: "agent", Session: "agent-42", AgentName: "claude", RepoRoot: "/repo"},
 			Fields: map[string]any{
-				"path": "/home/draco/.ssh/id_ed25519",
+				"path": "/home/user/.ssh/id_ed25519",
 				"op":   "read",
 			},
 			Raw: map[string]any{
-				"path": "/home/draco/.ssh/id_ed25519",
+				"path": "/home/user/.ssh/id_ed25519",
 			},
 		},
 		Outcome:   arbiterx.NewOutcome(arbiterx.OutcomeDeny, "DenyHostSecrets", map[string]any{"host": "github.com", "reason": "blocked"}),
@@ -244,7 +244,7 @@ func TestExportRedactsAuditEvents(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("ExportJSONL: %v", err)
 	}
-	if strings.Contains(buf.String(), "/home/draco/.ssh") || strings.Contains(buf.String(), "github.com") {
+	if strings.Contains(buf.String(), "/home/user/.ssh") || strings.Contains(buf.String(), "github.com") {
 		t.Fatalf("export leaked redacted values: %s", buf.String())
 	}
 	var got Event
@@ -263,7 +263,7 @@ func TestExportRedactsAuditEvents(t *testing.T) {
 	if got.ChainPrev != "" || got.ChainHash != "" {
 		t.Fatalf("redacted export preserved chain fields: prev=%q hash=%q", got.ChainPrev, got.ChainHash)
 	}
-	if evt.InputEvent.Fields["path"] != "/home/draco/.ssh/id_ed25519" || evt.Outcome.Fields["host"] != "github.com" {
+	if evt.InputEvent.Fields["path"] != "/home/user/.ssh/id_ed25519" || evt.Outcome.Fields["host"] != "github.com" {
 		t.Fatalf("source event mutated: %+v", evt)
 	}
 }

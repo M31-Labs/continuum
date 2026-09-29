@@ -17,7 +17,7 @@ func TestAccumulatorBuildsBehavior(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		acc.Observe(event.NewNetworkConnect(subj, fmt.Sprintf("host-%d.example", i), "", 443))
 	}
-	acc.Observe(event.NewFileAccess(subj, "/home/draco/.ssh/id_ed25519", "read"))
+	acc.Observe(event.NewFileAccess(subj, "/home/user/.ssh/id_ed25519", "read"))
 	acc.Observe(event.Event{
 		Kind:    event.KindFileAccess,
 		Subject: subj,

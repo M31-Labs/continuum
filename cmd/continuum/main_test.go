@@ -929,7 +929,7 @@ func TestBuildCommandEnvironmentCleanEnv(t *testing.T) {
 	env, err := buildCommandEnvironment(
 		[]string{
 			"PATH=/bin",
-			"HOME=/home/draco",
+			"HOME=/home/user",
 			"TERM=xterm",
 			"AWS_SECRET_ACCESS_KEY=secret",
 		},
@@ -941,7 +941,7 @@ func TestBuildCommandEnvironmentCleanEnv(t *testing.T) {
 		t.Fatalf("buildCommandEnvironment: %v", err)
 	}
 	joined := strings.Join(env, "\n")
-	for _, want := range []string{"PATH=/usr/bin", "HOME=/home/draco", "TERM=xterm", "FOO=bar", "CONTINUUM_SESSION=s1"} {
+	for _, want := range []string{"PATH=/usr/bin", "HOME=/home/user", "TERM=xterm", "FOO=bar", "CONTINUUM_SESSION=s1"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("env missing %s: %+v", want, env)
 		}
@@ -2104,7 +2104,7 @@ func TestAuditListFilters(t *testing.T) {
 	if _, _, err := engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/repo/main.go", "write")); err != nil {
 		t.Fatalf("DecideEvent allow: %v", err)
 	}
-	if _, _, err := engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/home/draco/.ssh/id_ed25519", "read")); err != nil {
+	if _, _, err := engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/home/user/.ssh/id_ed25519", "read")); err != nil {
 		t.Fatalf("DecideEvent deny: %v", err)
 	}
 	if err := sink.Close(); err != nil {
@@ -2147,7 +2147,7 @@ func TestAuditListFilters(t *testing.T) {
 	if got := info.Mode().Perm(); got != 0600 {
 		t.Fatalf("export mode = %v, want 0600", got)
 	}
-	if strings.Contains(string(exportData), "/home/draco/.ssh") || strings.Contains(string(exportData), "chain_hash") {
+	if strings.Contains(string(exportData), "/home/user/.ssh") || strings.Contains(string(exportData), "chain_hash") {
 		t.Fatalf("redacted export leaked source values or chain hash: %s", string(exportData))
 	}
 	var exported audit.Event

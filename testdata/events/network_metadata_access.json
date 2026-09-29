@@ -7,7 +7,7 @@
     "id": "agent:claude",
     "session": "agent-42",
     "pid": 4242,
-    "repo_root": "/home/draco/src/app",
+    "repo_root": "/home/user/src/app",
     "agent_name": "claude"
   },
   "fields": {
