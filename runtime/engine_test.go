@@ -27,7 +27,7 @@ func TestEngineDecideEventWritesAudit(t *testing.T) {
 	engine.NewID = func() (string, error) { return "evt_test", nil }
 
 	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
-	record, decision, err := engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/home/draco/.ssh/id_ed25519", "read"))
+	record, decision, err := engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/home/user/.ssh/id_ed25519", "read"))
 	if err != nil {
 		t.Fatalf("DecideEvent: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestEnginePersistsFailedDeliveryAttempt(t *testing.T) {
 	engine := NewEngine(bundle, sink)
 	engine.File = failingFileBackend{}
 	subj := subject.NewAgent("claude", "agent-42", "/repo", "", 123)
-	_, _, err = engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/home/draco/.ssh/id_ed25519", "read"))
+	_, _, err = engine.DecideEvent(context.Background(), event.NewFileAccess(subj, "/home/user/.ssh/id_ed25519", "read"))
 	if err == nil {
 		t.Fatal("expected delivery error")
 	}

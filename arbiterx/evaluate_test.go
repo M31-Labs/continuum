@@ -23,15 +23,15 @@ func TestAgentGuardHostSecretDenied(t *testing.T) {
 }
 
 func TestAgentGuardRepoFileAllowed(t *testing.T) {
-	subj := subject.NewAgent("claude", "agent-42", "/home/draco/src/app", "", 123)
-	evt := event.NewFileAccess(subj, "/home/draco/src/app/main.go", "write")
+	subj := subject.NewAgent("claude", "agent-42", "/home/user/src/app", "", 123)
+	evt := event.NewFileAccess(subj, "/home/user/src/app/main.go", "write")
 	decision := evaluate(t, event.Normalize(evt))
 	assertSelected(t, decision, arbiterx.OutcomeAllow, "AllowInsideRepo")
 }
 
 func TestAgentGuardCIWriteAsks(t *testing.T) {
-	subj := subject.NewAgent("claude", "agent-42", "/home/draco/src/app", "", 123)
-	evt := event.NewFileAccess(subj, "/home/draco/src/app/.github/workflows/test.yml", "write")
+	subj := subject.NewAgent("claude", "agent-42", "/home/user/src/app", "", 123)
+	evt := event.NewFileAccess(subj, "/home/user/src/app/.github/workflows/test.yml", "write")
 	decision := evaluate(t, event.Normalize(evt))
 	assertSelected(t, decision, arbiterx.OutcomeAskHuman, "AskOnCIWrites")
 }

@@ -286,7 +286,7 @@ func TestHTTPHandlerIngestsContinuumEvent(t *testing.T) {
     "repo_root": "/repo"
   },
   "fields": {
-    "path": "/home/draco/.ssh/id_ed25519",
+    "path": "/home/user/.ssh/id_ed25519",
     "op": "read"
   }
 }`
